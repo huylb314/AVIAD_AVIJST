@@ -1,0 +1,3 @@
+food,sauc,chicken,shrimp,chees,potato,fri,tomato,roast,onion,pork,goat,grill,tuna,salad,beef,tapa
+staff,servic,friendli,rude,hostess,waiter,bartend,waitress,help,polit,bar,courteou,member,waitstaff,attitud,reserv,tip
+atmospher,scene,place,tabl,outsid,area,ambianc,outdoor,romant,cozi,decor,sit,wall,light,window,area,ceil,floor

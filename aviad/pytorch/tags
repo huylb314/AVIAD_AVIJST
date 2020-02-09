@@ -1,0 +1,63 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+ProdLDA	pytorch_model.py	/^class ProdLDA(nn.Module):$/;"	c
+VAE	tf_model.py	/^class VAE(object):$/;"	c
+__init__	pytorch_model.py	/^    def __init__(self, net_arch):$/;"	m	class:ProdLDA
+__init__	tf_model.py	/^    def __init__(self, network_architecture, transfer_fct=tf.nn.softplus,$/;"	m	class:VAE
+_create_loss_optimizer	tf_model.py	/^    def _create_loss_optimizer(self):$/;"	m	class:VAE
+_create_network	tf_model.py	/^    def _create_network(self):$/;"	m	class:VAE
+args	pytorch_run.py	/^args = parser.parse_args()$/;"	v
+associations	pytorch_run.py	/^associations = {$/;"	v
+batch_size	tf_run.py	/^batch_size=200$/;"	v
+create_minibatch	tf_run.py	/^def create_minibatch(data):$/;"	f
+data_te	tf_run.py	/^data_te = np.array([onehot(doc.astype('int'),vocab_size) for doc in data_te if np.sum(doc)!=0])$/;"	v
+data_te	tf_run.py	/^data_te = np.load(dataset_te)$/;"	v
+data_tr	tf_run.py	/^data_tr = np.array([onehot(doc.astype('int'),vocab_size) for doc in data_tr if np.sum(doc)!=0])$/;"	v
+data_tr	tf_run.py	/^data_tr = np.load(dataset_tr)$/;"	v
+dataset_te	tf_run.py	/^dataset_te = 'data\/20news_clean\/test.txt.npy'$/;"	v
+dataset_tr	tf_run.py	/^dataset_tr = 'data\/20news_clean\/train.txt.npy'$/;"	v
+docs_te	tf_run.py	/^docs_te = data_te$/;"	v
+docs_tr	tf_run.py	/^docs_tr = data_tr$/;"	v
+emb	pytorch_run.py	/^    emb = model.decoder.weight.data.cpu().numpy().T$/;"	v
+forward	pytorch_model.py	/^    def forward(self, input, compute_loss=False, avg_loss=True):$/;"	m	class:ProdLDA
+hook_func	pytorch_visualize.py	/^    def hook_func(module, inputs, output):$/;"	f	function:register_vis_hooks
+hooks	pytorch_visualize.py	/^hooks = []$/;"	v
+identify_topic_in_line	pytorch_run.py	/^def identify_topic_in_line(line):$/;"	f
+learning_rate	tf_run.py	/^learning_rate=0.002$/;"	v
+loss	pytorch_model.py	/^    def loss(self, input, recon, posterior_mean, posterior_logvar, posterior_var, avg=True):$/;"	m	class:ProdLDA
+main	tf_run.py	/^def main(argv):$/;"	f
+make_data	pytorch_run.py	/^def make_data():$/;"	f
+make_model	pytorch_run.py	/^def make_model():$/;"	f
+make_network	tf_run.py	/^def make_network(layer1=100,layer2=100,num_topics=50,bs=200,eta=0.002):$/;"	f
+make_optimizer	pytorch_run.py	/^def make_optimizer():$/;"	f
+n_samples_te	tf_run.py	/^n_samples_te = data_te.shape[0]$/;"	v
+n_samples_tr	tf_run.py	/^n_samples_tr = data_tr.shape[0]$/;"	v
+network_architecture	tf_run.py	/^    dict(n_hidden_recog_1=100, # 1st layer encoder neurons$/;"	v
+new_function__call__	pytorch_visualize.py	/^    def new_function__call__(self, *args, **kwargs):$/;"	f	function:register_vis_hooks
+old_function__call__	pytorch_visualize.py	/^old_function__call__ = Function.__call__$/;"	v
+onehot	tf_run.py	/^def onehot(data, min_length):$/;"	f
+parser	pytorch_run.py	/^parser = argparse.ArgumentParser()$/;"	v
+partial_fit	tf_model.py	/^    def partial_fit(self, X):$/;"	m	class:VAE
+print_perp	pytorch_run.py	/^def print_perp(model):$/;"	f
+print_perp	tf_run.py	/^def print_perp(model):$/;"	f
+print_top_words	pytorch_run.py	/^def print_top_words(beta, feature_names, n_top_words=10):$/;"	f
+print_top_words	tf_run.py	/^def print_top_words(beta, feature_names, n_top_words=10):$/;"	f
+register_creator	pytorch_visualize.py	/^def register_creator(inputs, creator, output):$/;"	f
+register_vis_hooks	pytorch_visualize.py	/^def register_vis_hooks(model):$/;"	f
+remove_vis_hooks	pytorch_visualize.py	/^def remove_vis_hooks():$/;"	f
+save_visualization	pytorch_visualize.py	/^def save_visualization(name, format='svg'):$/;"	f
+sizestr	pytorch_visualize.py	/^    def sizestr(var):$/;"	f	function:save_visualization
+slim	tf_model.py	/^slim = tf.contrib.slim$/;"	v
+test	tf_model.py	/^    def test(self, X):$/;"	m	class:VAE
+to_onehot	pytorch_run.py	/^def to_onehot(data, min_length):$/;"	f
+topic_prop	tf_model.py	/^    def topic_prop(self, X):$/;"	m	class:VAE
+train	pytorch_run.py	/^def train():$/;"	f
+train	tf_run.py	/^def train(network_architecture, minibatches, type='prodlda',learning_rate=0.001,$/;"	f
+visualize	pytorch_run.py	/^def visualize():$/;"	f
+vocab	tf_run.py	/^vocab = 'data\/20news_clean\/vocab.pkl'$/;"	v
+vocab	tf_run.py	/^vocab = pickle.load(open(vocab,'r'))$/;"	v
+vocab_size	tf_run.py	/^vocab_size=len(vocab)$/;"	v
