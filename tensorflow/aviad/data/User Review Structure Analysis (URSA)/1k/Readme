@@ -1,0 +1,41 @@
+{'CORPUS_XML_FILE_LOCATION': './data/User Review Structure Analysis (URSA)/Classified_Corpus.xml',
+ 'FILE_LOG_AMBIENCE_NOT_PASS': 'ambience_not_pass.txt',
+ 'FILE_LOG_AMBIENCE_NOT_PASS_LOCATION': './data/User Review Structure Analysis (URSA)/ambience_not_pass.txt',
+ 'FILE_LOG_FOOD_NOT_PASS': 'food_not_pass.txt',
+ 'FILE_LOG_FOOD_NOT_PASS_LOCATION': './data/User Review Structure Analysis (URSA)/food_not_pass.txt',
+ 'FILE_LOG_STAFF_NOT_PASS': 'staff_not_pass.txt',
+ 'FILE_LOG_STAFF_NOT_PASS_LOCATION': './data/User Review Structure Analysis (URSA)/staff_not_pass.txt',
+ 'FOLDER_DATASET': './data/User Review Structure Analysis (URSA)',
+ 'LABEL_REVIEW_AMBIENCE': 2,
+ 'LABEL_REVIEW_FOOD': 0,
+ 'LABEL_REVIEW_STAFF': 1,
+ 'LENGTH_AMBIENCE_ALLOWED': 16,
+ 'LENGTH_FOOD_ALLOWED': 22,
+ 'LENGTH_STAFF_ALLOWED': 16,
+ 'LIST_POS_TAG': None,
+ 'MIN_FREQ_ALLOWED': 3,
+ 'PRINT_STATUS': True,
+ 'SAMPLE_INDEX_FROM': 0,
+ 'SAMPLE_INDEX_TO': 5,
+ 'TAG_NAME_AMBIENCE': 'Ambience',
+ 'TAG_NAME_FOOD': 'Food',
+ 'TAG_NAME_POLARITY_ALLOWED': ['Positive', 'Negative', 'Neutral'],
+ 'TAG_NAME_STAFF': 'Staff',
+ 'TAG_XML_REVIEW': './/Review',
+ 'TRAIN_FILENAME_SAVE': 'train.txt.npy',
+ 'TRAIN_FILE_LOCATION': './data/User Review Structure Analysis (URSA)/train.txt.npy',
+ 'VOCAB_FILENAME_SAVE': 'vocab.pkl',
+ 'VOCAB_FILE_LOCATION': './data/User Review Structure Analysis (URSA)/vocab.pkl',
+ 'XML_FILENAME': 'Classified_Corpus.xml'}
+Length  listSentencesFood 	:  96235
+Length  listSentencesStaff 	:  32892
+Length  listSentencesAmbience 	:  16803
+Length  listSentencesUniqueAspectFood 	:  62348
+Length  listSentencesUniqueAspectStaff 	:  23730
+Length  listSentencesUniqueAspectAmbience 	:  13385
+Length  listProcessedSentencesFood 	:  1182
+Length  listProcessedSentencesStaff 	:  1205
+Length  listProcessedSentencesAmbience 	:  1052
+Length  listLabeledSentencesFood 	:  1182
+Length  listLabeledSentencesStaff 	:  1205
+Length  listLabeledSentencesAmbience 	:  1052
