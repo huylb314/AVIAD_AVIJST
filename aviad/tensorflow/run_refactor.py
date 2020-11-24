@@ -1,5 +1,7 @@
 import yaml
+import argparse
 
+print ("AAAAA")
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()
@@ -9,7 +11,7 @@ def main():
     #                     help='{coco,f8k,f30k,10crop}_precomp|coco|f8k|f30k')
     parser.add_argument('--num_epochs', default=30, type=int,
                         help='Number of training epochs.')
-    parser.add_argument('--config', type=str, default="configs/1k.yaml"\
+    parser.add_argument('--config', type=str, default="configs/1k.yaml", \
                         help="Which configuration to use. See into 'config' folder")
                         
     opt = parser.parse_args()
@@ -17,4 +19,8 @@ def main():
 
     with open(opt.config, 'r') as ymlfile:
         config = yaml.load(ymlfile)
-        
+    
+    print (config)
+
+if __name__ == "__main__":
+    main()
