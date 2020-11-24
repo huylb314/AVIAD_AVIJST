@@ -1,0 +1,31 @@
+dataset:
+  name: 'ursa'
+  folder-path: 'data/User Review Structure Analysis (URSA)/1k'
+  feature-file: 'train.txt.npy'
+  vocab-file: 'vocab.pkl'
+  sw-file: 'seed_words.txt' # seed words 'food', 'staff', 'ambience'
+
+model:
+  name: 'aviad'
+  embed-size: 1024
+  text-aggregation: 'first'
+  image-aggregation: 'first'
+  layers: 2
+  exclude-stopwords: False
+  shared-transformer: False
+  dropout: 0.1
+
+training:
+  lr: 0.00001  # 0.000006
+  grad-clip: 2.0
+  max-violation: True
+  loss-type: 'alignment'
+  alignment-mode: 'symm'
+  measure: 'dot'
+  margin: 0.2
+  bs: 40
+  scheduler: 'steplr'
+  gamma: 0.1
+  step-size: 20
+  warmup: null
+  warmup-period: 1000
