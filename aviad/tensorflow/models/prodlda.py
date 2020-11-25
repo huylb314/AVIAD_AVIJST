@@ -1,12 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import itertools,time
-import sys, os
-from collections import OrderedDict
-from copy import deepcopy
-from time import time
-import matplotlib.pyplot as plt
-import pickle
+
 def xavier_init(fan_in, fan_out, constant=1):
     low = -constant*np.sqrt(6.0/(fan_in + fan_out))
     high = constant*np.sqrt(6.0/(fan_in + fan_out))
@@ -17,31 +11,33 @@ def log_dir_init(fan_in, fan_out,topics=50):
     return tf.log((1.0/topics)*tf.ones([fan_in, fan_out]))
 
 tf.reset_default_graph()
-class VAE(object):
+class ProdLDA(object):
     """
     See "Auto-Encoding Variational Bayes" by Kingma and Welling for more details.
     """
-
-
-    def __init__(self, network_architecture, data_prior, transfer_fct=tf.nn.softplus,
+    def __init__(self, n_hidden_recog_1, n_hidden_recog_2, n_hidden_gener_1,
+                 n_input, n_z, data_prior, transfer_fct=tf.nn.softplus,
                  learning_rate=0.001, batch_size=100):
-        self.network_architecture = network_architecture
+        self.n_hidden_recog_1 = n_hidden_recog_1
+        self.n_hidden_recog_2 = n_hidden_recog_2
+        self.n_hidden_gener_1 = n_hidden_gener_1
+        self.n_input = n_input
+        self.n_z = n_z
         self.transfer_fct = transfer_fct
         self.learning_rate = learning_rate
         self.batch_size = batch_size
-        print ('Learning Rate:', self.learning_rate)
 
         # tf Graph input
         self.prior, prior_bin = data_prior
-        self.x = tf.placeholder(tf.float32, [None, network_architecture["n_input"]])
+        self.x = tf.placeholder(tf.float32, [None, n_input])
         self.x_bin = self._get_data_bin(self.x, self.prior, prior_bin)
         self.keep_prob = tf.placeholder(tf.float32)
 
-        self.h_dim = int(network_architecture["n_z"])
+        self.h_dim = n_z
         self.a = 1*np.ones((1 , self.h_dim)).astype(np.float32)
         self.mu2 = tf.constant((np.log(self.a).T-np.mean(np.log(self.a),1)).T)
         self.var2 = tf.constant(  ( ( (1.0/self.a)*( 1 - (2.0/self.h_dim) ) ).T +
-                                ( 1.0/(self.h_dim*self.h_dim) )*np.sum(1.0/self.a,1) ).T  )
+                                ( 1.0/(self.h_dim*self.h_dim) )*np.sum(1.0/self.a,1) ).T)
 
         self._create_network()
         self._create_loss_optimizer()
@@ -52,12 +48,15 @@ class VAE(object):
         self.sess.run(init)
 
     def _create_network(self):
-        self.network_weights = self._initialize_weights(**self.network_architecture)
+        self.network_weights = self._initialize_weights(
+            self.n_hidden_recog_1, self.n_hidden_recog_2,
+            self.n_hidden_gener_1, self.n_input, self.n_z
+        )
         self.z_mean,self.z_log_sigma_sq = \
             self._recognition_network(self.network_weights["weights_recog"],
                                       self.network_weights["biases_recog"])
 
-        n_z = self.network_architecture["n_z"]
+        n_z = self.n_z
         eps = tf.random_normal((self.batch_size, n_z), 0, 1,
                                dtype=tf.float32)
         self.z = tf.add(self.z_mean,
