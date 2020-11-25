@@ -7,6 +7,7 @@ import os.path as osp
 from sklearn.model_selection import StratifiedShuffleSplit
 
 import utils
+from models import ProdLDA
 
 def main():
     # Hyper Parameters
@@ -63,9 +64,9 @@ def main():
     print (gamma_bin.shape)
 
     # define model
-    prodlda.VAE(network_architecture,
-                learning_rate=learning_rate,
-                batch_size=batch_size, data_prior=data_prior)
+    model = ProdLDA(n_encoder_1, n_encoder_2, vocab_size,
+                   vocab_size, n_latent, learning_rate=lr,
+                   batch_size=bs, data_prior=(gamma, gamma_bin))
 
     for train_index, test_index in splitted_data:
         data_train, label_train = data[train_index], label[train_index]
@@ -74,6 +75,8 @@ def main():
         print (data.shape)
         print ('Dim Training Data',data_train.shape, vocab_size)
         print ('Dim Test Data',data_test.shape, vocab_size)
+
+        
 
 if __name__ == "__main__":
     main()
