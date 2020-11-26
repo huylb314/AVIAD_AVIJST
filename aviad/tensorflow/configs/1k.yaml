@@ -16,3 +16,4 @@ training:
   lr: 0.002  # 0.002
   bs: 200
   d_step: 5
+  epochs: 300 # 20

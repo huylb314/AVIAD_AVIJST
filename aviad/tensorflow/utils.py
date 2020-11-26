@@ -13,13 +13,14 @@ def classification_evaluate(y_pred, y_true, labels, show=True):
     precision, recall, f1_score, support = metrics.precision_recall_fscore_support(\
                                                      y_true=y_true, \
                                                      y_pred=y_pred, \
-                                                     labels=labels,\
+                                                    #  labels=labels,\
                                                      average=None)
     if show:
-        for idx, (iaccuracy, iprecision, irecall, if1_score, isupport) \
-            in enumerate(zip(accuracy, precision, recall, f1_score, support)):
+        print ("accuracy={}".format(accuracy))
+        for idx, (iprecision, irecall, if1_score, isupport) \
+            in enumerate(zip(precision, recall, f1_score, support)):
             print ("{}-{}".format(idx, labels[idx]))
-            print ("accuracy={}, precision={}, recall={}, f1_score={}, support={}"\
-                  .format(accuracy, iprecision, irecall, if1_score, isupport))
+            print ("precision={}, recall={}, f1_score={}, support={}"\
+                  .format(iprecision, irecall, if1_score, isupport))
 
     return (accuracy, precision, recall, f1_score)
