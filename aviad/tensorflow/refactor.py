@@ -42,17 +42,16 @@ def main():
     d_step = config_training['d_step']
     epochs = config_training['epochs']
 
-    
-    loaded_data = np.load(data_path)
-    data, label = loaded_data[:, 0], loaded_data[:, 1]
+    ds = np.load(data_path)
     with open(vocab_path, 'rb') as vocabfile:
         vocab = pickle.load(vocabfile)
+    
+    ds_x, ds_y = ds[:, 0], ds[:, 1]
     vocab_size=len(vocab)
 
     # Split data
     sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
-    # train_index, test_index = sss.split(data, label)
-    splitted_data = sss.split(data, label)
+    splitted_data = sss.split(ds_x, ds_y)
 
     gamma = np.zeros((vocab_size, n_latent))
     gamma_bin = np.zeros((bs, vocab_size, n_latent))
@@ -69,15 +68,15 @@ def main():
                    vocab_size, n_latent, learning_rate=lr,
                    batch_size=bs, data_prior=(gamma, gamma_bin))
 
-    for train_index, test_index in splitted_data:
-        data_train, label_train, len_train = \
-            data[train_index], label[train_index], len(train_index)
-        data_test, label_test, len_test = \
-            data[test_index], label[test_index], len(test_index)
+    for ds_train_idx, ds_test_idx in splitted_data:
+        train_x, train_y, train_len = \
+            data[ds_train_idx], label[ds_train_idx], len(ds_train_idx)
+        test_x, test_y, test_len = \
+            data[ds_test_idx], label[ds_test_idx], len(ds_test_idx)
         print ('Data Loaded')
-        print (data.shape)
-        print ('Dim Training Data',data_train.shape, vocab_size)
-        print ('Dim Test Data',data_test.shape, vocab_size)
+        print (ds_x.shape)
+        print ('Dim Training Data',train_x.shape, vocab_size)
+        print ('Dim Test Data',test_x.shape, vocab_size)
 
         for epoch in range(epochs):
             avg_cost = 0.
@@ -87,19 +86,19 @@ def main():
             avg_recall = [0.] * 3
             avg_f1_score = [0.] * 3
 
-            for batch_index in range(0, len_train, bs):
-                if batch_index+bs < len_train:
+            for batch_train_idx in range(0, train_len, bs):
+                if batch_train_idx+bs < train_len:
                     # print ("batch from {} to {}".format(batch_index, batch_index+bs if (batch_index+bs < len_train) else len_train))
-                    batch_x = data_train[batch_index:batch_index+bs]
-                    batch_x = np.array([utils.onehot(doc,vocab_size) for doc in batch_x])
-                    batch_y = label_train[batch_index:batch_index+bs]
+                    batch_train_x = data_train[batch_train_idx:batch_train_idx+bs]
+                    batch_train_x = np.array([utils.onehot(doc, vocab_size) for doc in batch_x])
+                    batch_train_y = train_y[batch_train_idx:batch_train_idx+bs]
 
                     # print ("batch_x: {}".format(batch_x.shape))
                     # print ("batch_y: {}".format(batch_y.shape))
 
                     emb = None
                     t_c = time.time()
-                    cost, emb = model.partial_fit(batch_x)
+                    cost, emb = model.partial_fit(batch_train_x)
                     c_elap = time.time() - t_c
 
                     # Compute average loss
@@ -109,18 +108,12 @@ def main():
                     sum_t_c += c_elap
 
                     # Compute accuracy
-                    temp_theta = model.topic_prop(batch_x)
-                    temp_theta_max_idx = np.argmax(temp_theta, axis=1)
-                    temp_theta_y_pred = temp_theta_max_idx # np.expand_dims(temp_theta_max_idx, axis=1)
-
-                    batch_y = batch_y # np.expand_dims(batch_y, axis=1)
-
-                    # to list
-                    temp_theta_y_pred = temp_theta_y_pred.tolist()
-                    batch_y = batch_y.tolist()
+                    batch_train_theta = model.topic_prop(batch_train_x)
+                    batch_train_theta = np.argmax(batch_train_theta, axis=1)
                     
-                    accuracy, precision, recall, f1_score = utils.classification_evaluate(temp_theta_y_pred, batch_y,\
-                                                                            ['food', 'staff', 'ambience'], show=False)
+                    accuracy, precision, recall, f1_score = \
+                        utils.classification_evaluate(batch_train_theta, batch_train_y, \
+                                                     ['food', 'staff', 'ambience'], show=False)
                     avg_accuracy += accuracy / len_train * bs
 
                     for k in range(3):
@@ -129,14 +122,14 @@ def main():
                         avg_f1_score[k] += f1_score[k] / len_train * bs
 
                     if np.isnan(avg_cost):
-                        print (epoch, i, np.sum(batch_xs,1).astype(np.int), batch_xs.shape)
                         print ('Encountered NaN, stopping training. Please check the learning_rate settings and the momentum.')
-                        # return vae,emb
                         sys.exit()
             
 
             theta_y_pred_te = []
-            theta_label_te = []
+            batch_test_theta = []
+            # test_theta = []
+            # test_labe= = []
             for batch_index in range(0, len_test, bs):
                 # print ("batch from {} to {}".format(batch_index, batch_index+bs if (batch_index+bs < len_train) else len_train))
                 batch_x = data_test[batch_index:batch_index+bs]
