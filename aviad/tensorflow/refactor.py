@@ -12,15 +12,48 @@ from sklearn.model_selection import StratifiedShuffleSplit
 import utils
 from models import ProdLDA
 
+# fastai utility
+def listify(o):
+    if o is None: return []
+    if isinstance(o, list): return o
+    if isinstance(o, str): return [o]
+    if isinstance(o, Iterable): return list(o)
+    return [o]
 
-class Dataset():
-    def __init__(self, x, y): 
+def compose(x, funcs, *args, **kwargs):
+    for f in listify(funcs): 
+        x = f(x, **kwargs)
+    return x
+
+class Onehotify():
+    def __init__(self, vocab_size):
+        self.vocab_size = vocab_size
+    def __call__(self, item):
+        return np.bincount(item, minlength=self.vocab_size)
+
+class YToOnehot():
+    def __init__(self, num_classes):
+        self.num_classes = num_classes
+    def __call__(self, item):
+        categorical = np.zeros((1, self.num_classes))
+        categorical[0, item] = 1
+        return categorical
+
+class URSADataset():
+    def __init__(self, x, y, tfms_x, tfms_y): 
         self.x, self.y = x, y
+        self.x_tfms = tfms_x
+        self.y_tfms = tfms_y
     def __len__(self): 
         return len(self.x)
     def __getitem__(self, i): 
+        print (i)
+        print (self.x[i])
+        # print (self.x[i].shape)
+        print (type(self.x[i]))
         return self.x[i], self.y[i]
-
+        return compose(self.x[i], self.x_tfms), \
+            compose(self.y[i], self.y_tfms)
 
 class DataLoader():
     def __init__(self, ds, bs, drop_last=True): self.ds, self.bs, self.drop_last = ds, bs, drop_last
@@ -28,7 +61,6 @@ class DataLoader():
         length = len(self.ds) // self.bs if self.drop_last else math.ceil(len(self.ds) / self.bs)
         for i in range(0, length, 1):
             yield self.ds[(i*self.bs):(i*self.bs)+self.bs]
-
 
 def main():
     # Hyper Parameters
@@ -72,6 +104,9 @@ def main():
     vocab_size = len(vocab)
     seedwords = utils.read_seedword(seedword_path)
 
+    tfms_x = [Onehotify(vocab_size)]
+    tfms_y = []
+
     # Split data
     sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
     splitted_data = sss.split(dataset_x, dataset_y)
@@ -90,8 +125,12 @@ def main():
                     batch_size=bs, data_prior=(gamma_prior, gamma_prior_batch))
 
     for ds_train_idx, ds_test_idx in splitted_data:
-        train_ds, test_ds = Dataset(dataset_x[ds_train_idx], dataset_y[ds_train_idx]), \
-            Dataset(dataset_x[ds_test_idx], dataset_y[ds_test_idx])
+        train_ds, test_ds = URSADataset(dataset_x[ds_train_idx], dataset_y[ds_train_idx], tfms_x, tfms_y), \
+            URSADataset(dataset_x[ds_test_idx], dataset_y[ds_test_idx], tfms_x, tfms_y)
+        print (train_ds[0])
+        print (train_ds[0:10])
+        exit()
+        
         train_dl, test_dl = DataLoader(train_ds, bs), DataLoader(test_ds, bs)
 
         for epoch in range(epochs):
@@ -103,8 +142,6 @@ def main():
             avg_f1_score = [0.] * 3
 
             for batch_train_x,  batch_train_y in train_dl:
-                batch_train_x = np.array([utils.onehot(doc, vocab_size) for doc in batch_train_x])
-
                 emb = None
                 t_c = time.time()
                 cost, emb = model.partial_fit(batch_train_x)
@@ -121,8 +158,7 @@ def main():
                 batch_train_theta = np.argmax(batch_train_theta, axis=1)
 
                 accuracy, precision, recall, f1_score = \
-                    utils.classification_evaluate(batch_train_theta, batch_train_y,
-                                                  ['food', 'staff', 'ambience'], show=False)
+                    utils.classification_evaluate(batch_train_theta, batch_train_y, ['food', 'staff', 'ambience'], show=False)
                 avg_accuracy += accuracy / len(train_dl) * bs
 
                 for k in range(3):
@@ -131,32 +167,22 @@ def main():
                     avg_f1_score[k] += f1_score[k] / len(train_dl) * bs
 
                 if np.isnan(avg_cost):
-                    print(
-                        'Encountered NaN, stopping training. Please check the learning_rate settings and the momentum.')
+                    print('Encountered NaN, stopping training. Please check the learning_rate settings and the momentum.')
                     sys.exit()
 
             theta_y_pred_te = []
             batch_test_theta = []
             # test_theta = []
             # test_labe= = []
-            for batch_index in test_dl:
-                # print ("batch from {} to {}".format(batch_index, batch_index+bs if (batch_index+bs < len_train) else len_train))
-                batch_x = data_test[batch_index:batch_index+bs]
-                batch_x = np.array([utils.onehot(doc, vocab_size)
-                                    for doc in batch_x])
-                batch_y = label_test[batch_index:batch_index+bs]
-
-                temp_theta_te = model.topic_prop(batch_x)
-                temp_theta_max_idx_te = np.argmax(temp_theta_te, axis=1)
-                # np.expand_dims(temp_theta_max_idx_te, axis=1)
-                temp_theta_y_pred_te = temp_theta_max_idx_te
+            for batch_test_x,  batch_test_y in test_dl:
+                temp_theta_te = model.topic_prop(batch_test_x)
+                temp_theta_y_pred_te = np.argmax(temp_theta_te, axis=1)
 
                 theta_y_pred_te.extend(temp_theta_y_pred_te)
-                theta_label_te.extend(batch_y)
+                theta_label_te.extend(batch_test_y)
 
             accuracy_te, precision_te, recall_te, f1_score_te = \
-                utils.classification_evaluate(theta_y_pred_te, theta_label_te,
-                                              ['food', 'staff', 'ambience'], show=False)
+                utils.classification_evaluate(theta_y_pred_te, theta_label_te, ['food', 'staff', 'ambience'], show=False)
 
             # Display logs per epoch step
             if epoch % d_step == 0:
