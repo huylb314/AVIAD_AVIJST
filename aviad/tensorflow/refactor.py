@@ -39,29 +39,6 @@ class YToOnehot():
         categorical[0, item] = 1
         return categorical
 
-class URSADataset():
-    def __init__(self, x, y, tfms_x, tfms_y): 
-        self.x, self.y = x, y
-        self.x_tfms = tfms_x
-        self.y_tfms = tfms_y
-    def __len__(self): 
-        return len(self.x)
-    def __getitem__(self, i): 
-        print (i)
-        print (self.x[i])
-        # print (self.x[i].shape)
-        print (type(self.x[i]))
-        return self.x[i], self.y[i]
-        return compose(self.x[i], self.x_tfms), \
-            compose(self.y[i], self.y_tfms)
-
-class DataLoader():
-    def __init__(self, ds, bs, drop_last=True): self.ds, self.bs, self.drop_last = ds, bs, drop_last
-    def __iter__(self):
-        length = len(self.ds) // self.bs if self.drop_last else math.ceil(len(self.ds) / self.bs)
-        for i in range(0, length, 1):
-            yield self.ds[(i*self.bs):(i*self.bs)+self.bs]
-
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()
@@ -127,9 +104,6 @@ def main():
     for ds_train_idx, ds_test_idx in splitted_data:
         train_ds, test_ds = URSADataset(dataset_x[ds_train_idx], dataset_y[ds_train_idx], tfms_x, tfms_y), \
             URSADataset(dataset_x[ds_test_idx], dataset_y[ds_test_idx], tfms_x, tfms_y)
-        print (train_ds[0])
-        print (train_ds[0:10])
-        exit()
         
         train_dl, test_dl = DataLoader(train_ds, bs), DataLoader(test_ds, bs)
 
@@ -148,7 +122,7 @@ def main():
                 c_elap = time.time() - t_c
 
                 # Compute average loss
-                avg_cost += cost / len(train_dl) * bs
+                avg_cost += cost / len(train_ds) * bs
 
                 # Compute avg time
                 sum_t_c += c_elap
@@ -156,22 +130,23 @@ def main():
                 # Compute accuracy
                 batch_train_theta = model.topic_prop(batch_train_x)
                 batch_train_theta = np.argmax(batch_train_theta, axis=1)
+                # print (batch_train_theta.shape)
 
                 accuracy, precision, recall, f1_score = \
                     utils.classification_evaluate(batch_train_theta, batch_train_y, ['food', 'staff', 'ambience'], show=False)
-                avg_accuracy += accuracy / len(train_dl) * bs
+                avg_accuracy += accuracy / len(train_ds) * bs
 
                 for k in range(3):
-                    avg_precision[k] += precision[k] / len(train_dl) * bs
-                    avg_recall[k] += recall[k] / len(train_dl) * bs
-                    avg_f1_score[k] += f1_score[k] / len(train_dl) * bs
+                    avg_precision[k] += precision[k] / len(train_ds) * bs
+                    avg_recall[k] += recall[k] / len(train_ds) * bs
+                    avg_f1_score[k] += f1_score[k] / len(train_ds) * bs
 
                 if np.isnan(avg_cost):
                     print('Encountered NaN, stopping training. Please check the learning_rate settings and the momentum.')
                     sys.exit()
 
             theta_y_pred_te = []
-            batch_test_theta = []
+            theta_label_te = []
             # test_theta = []
             # test_labe= = []
             for batch_test_x,  batch_test_y in test_dl:
