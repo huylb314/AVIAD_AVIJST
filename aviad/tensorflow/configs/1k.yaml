@@ -15,5 +15,5 @@ model:
 training:
   lr: 0.01  # 0.002
   bs: 10
-  d_step: 50
+  d_step: 10
   epochs: 300 # 20
