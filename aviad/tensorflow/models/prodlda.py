@@ -18,22 +18,26 @@ class ProdLDA(object):
     """
 
     def __init__(self, n_hidden_enc_1, n_hidden_enc_2, n_hidden_dec_1, n_input, n_z,
-                 data_prior, transfer_fct=tf.nn.softplus, learning_rate=0.001, batch_size=100):
+                 data_prior, act=tf.nn.softplus, ld=20.0, al=1.0, lr=0.001, bs=100, dr=0.6):
         self.n_hidden_enc_1, self.n_hidden_enc_2 = n_hidden_enc_1, n_hidden_enc_2
         self.n_hidden_dec_1 = n_hidden_dec_1
         self.n_input, self.n_z = n_input, n_z
 
-        self.transfer_fct = transfer_fct
-        self.learning_rate = learning_rate
-        self.batch_size = batch_size
+        self.act = act
+        self.learning_rate = lr
+        self.ld = ld
+        self.al = al
+        self.batch_size = bs
+        self.dr = dr
 
         # tf Graph input
         self.prior, prior_bin = data_prior
         self.x = tf.placeholder(tf.float32, [None, n_input])
         self.x_bin = self._get_data_bin(self.x, self.prior, prior_bin)
         self.keep_prob = tf.placeholder(tf.float32)
+        self.lambda_ = tf.placeholder(tf.float32)
 
-        self.a = 1*np.ones((1, self.n_z)).astype(np.float32)
+        self.a = self.al*np.ones((1, self.n_z)).astype(np.float32)
         self.mu2 = tf.constant((np.log(self.a).T-np.mean(np.log(self.a), 1)).T)
         self.var2 = tf.constant((((1.0/self.a)*(1 - (2.0/self.n_z))).T +
                                  (1.0/(self.n_z*self.n_z))*np.sum(1.0/self.a, 1)).T)
@@ -82,10 +86,9 @@ class ProdLDA(object):
         return all_weights
 
     def _encoder_network(self, weights, biases):
-        # Generate probabilistic encoder (recognition network)
-        layer_1 = self.transfer_fct(tf.add(tf.matmul(self.x, weights['h1']), biases['b1']))
-        layer_2 = self.transfer_fct(tf.add(tf.matmul(layer_1, weights['h2']), biases['b2']))
-        layer_enc_do = tf.nn.dropout(layer_2, self.dropout_rate)
+        layer_1 = self.act(tf.add(tf.matmul(self.x, weights['h1']), biases['b1']))
+        layer_2 = self.act(tf.add(tf.matmul(layer_1, weights['h2']), biases['b2']))
+        layer_enc_do = tf.nn.dropout(layer_2, self.keep_prob)
 
         z_mean = tf.contrib.layers.batch_norm(tf.add(tf.matmul(layer_enc_do, weights['out_mean']), biases['out_mean']))
         z_log_sigma_sq = \
@@ -94,24 +97,24 @@ class ProdLDA(object):
         return (z_mean, z_log_sigma_sq)
 
     def _decoder_network(self, z, weights):
-        layer_dec_do = tf.nn.dropout(tf.nn.softmax(z), self.dropout_rate)
+        layer_dec_do = tf.nn.dropout(tf.nn.softmax(z), self.keep_prob)
         x_reconstr_mean = tf.nn.softmax(tf.contrib.layers.batch_norm(tf.add(tf.matmul(layer_dec_do, weights['h1']), 0.0)))
         return x_reconstr_mean
 
     def _prior_loss(self, prior, weights):
         W, b = weights[0], weights[1]
-        W1 = self.transfer_fct(tf.add(W['h1'], b['b1']))
-        W2 = self.transfer_fct(tf.add(tf.matmul(W1, W['h2']), b['b2']))
-        Wdr = tf.nn.dropout(W2, self.dropout_rate)
+        W1 = self.act(tf.add(W['h1'], b['b1']))
+        W2 = self.act(tf.add(tf.matmul(W1, W['h2']), b['b2']))
+        Wdr = tf.nn.dropout(W2, self.keep_prob)
         Wo = tf.nn.softmax(tf.contrib.layers.batch_norm(tf.add(tf.matmul(Wdr, W['out_mean']), b['out_mean'])))
-        
+
         self.Wo = Wo
-        self.prior_loss = 20.0 * tf.reduce_sum((prior - self.x_bin*Wo)**2, [1, 2])
+        self.prior_loss = self.lambda_ * tf.reduce_sum((prior - self.x_bin*Wo)**2, [1, 2])
         return self.prior_loss
 
     def _create_loss_optimizer(self):
         self.x_reconstr_mean += 1e-10
-        reconstr_loss = -tf.reduce_sum(self.x * tf.log(self.x_reconstr_mean), 1)  # /tf.reduce_sum(self.x,1)
+        reconstr_loss = -tf.reduce_sum(self.x * tf.log(self.x_reconstr_mean), 1)  #/ tf.reduce_sum(self.x,1)
         latent_loss = 0.5*(tf.reduce_sum(tf.div(self.sigma, self.var2), 1) +
                            tf.reduce_sum(tf.multiply(tf.div((self.mu2 - self.z_mean), self.var2), (self.mu2 - self.z_mean)), 1) - \
                            self.n_z + tf.reduce_sum(tf.log(self.var2), 1) - tf.reduce_sum(self.z_log_sigma_sq, 1))
@@ -132,24 +135,24 @@ class ProdLDA(object):
     def partial_fit(self, X):
         opt, cost, beta = self.sess.run((self.optimizer, self.cost, 
                                         self.network_weights['weights_dec']['h1']), \
-                                        feed_dict={self.x: X, self.keep_prob: 0.4})
+                                        feed_dict={self.x: X, self.keep_prob: 1.0 - self.dr, self.lambda_: self.ld})
         return cost, beta
 
     def gamma_test(self):
         """Test the model and return the lowerbound on the log-likelihood.
         """
-        gamma = self.sess.run((self.Wo), feed_dict={self.keep_prob: 1.0})
+        gamma = self.sess.run((self.Wo), feed_dict={self.keep_prob: 1.0, self.lambda_: self.ld})
         return gamma
 
     def test(self, X):
         """Test the model and return the lowerbound on the log-likelihood.
         """
-        cost = self.sess.run((self.cost), feed_dict={self.x: X, self.keep_prob: 1.0})
+        cost = self.sess.run((self.cost), feed_dict={self.x: X, self.keep_prob: 1.0, self.lambda_: self.ld})
         return cost
 
     def topic_prop(self, X):
         """Theta is the topic proportion vector. Apply softmax transformation to it before use.
         """
         theta = self.sess.run((tf.nn.softmax(self.z_mean)), \
-                                feed_dict={self.x: X, self.keep_prob: 1.0})
+                                feed_dict={self.x: X, self.keep_prob: 1.0, self.lambda_: self.ld})
         return theta

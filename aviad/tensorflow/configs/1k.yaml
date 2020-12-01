@@ -10,10 +10,13 @@ model:
   n_encoder_1: 100
   n_encoder_2: 100
   n_latent: 3 # match the number of aspects ('food', 'staff', 'ambience')
-  dropout: 0.5
+  dropout: 0.6
+  lambda: 20.0
+  alpha: 1.0
 
 training:
-  lr: 0.01  # 0.002
-  bs: 10
-  d_step: 10
+  lr: 0.0005  # 0.002
+  bs: 200
+  d_step: 5
   epochs: 300 # 20
+  n_topwords: 50

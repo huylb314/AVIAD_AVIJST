@@ -58,6 +58,8 @@ def main():
     n_encoder_2 = config_model['n_encoder_2']
     n_latent = config_model['n_latent']
     dr = config_model['dropout']
+    ld = config_model['lambda']
+    al = config_model['alpha']
 
     # training
     config_training = config['training']
@@ -65,12 +67,14 @@ def main():
     bs = config_training['bs']
     d_step = config_training['d_step']
     epochs = config_training['epochs']
+    n_topwords = config_training['n_topwords']
 
     dataset = np.load(data_path)
     with open(vocab_path, 'rb') as vocabfile:
         vocab = pickle.load(vocabfile)
 
     dataset_x, dataset_y = dataset[:, 0], dataset[:, 1]
+    id_vocab = utils.sort_values(vocab)
     vocab_size = len(vocab)
     seedwords = utils.read_seedword(seedword_path)
 
@@ -90,9 +94,9 @@ def main():
             gamma_prior_batch[:, idx_vocab, :] = 1.0  # N x V x K
 
     # define model
-    model = ProdLDA(n_encoder_1, n_encoder_2, vocab_size,
-                    vocab_size, n_latent, learning_rate=lr,
-                    batch_size=bs, data_prior=(gamma_prior, gamma_prior_batch))
+    model = ProdLDA(n_encoder_1, n_encoder_2, 
+                    vocab_size, vocab_size, n_latent, 
+                    data_prior=(gamma_prior, gamma_prior_batch), ld=ld, al=al, lr=lr, bs=bs, dr=dr)
 
     for ds_train_idx, ds_test_idx in splitted_data:
         train_ds, test_ds = URSADataset(dataset_x[ds_train_idx], dataset_y[ds_train_idx], tfms_x, tfms_y), \
@@ -103,11 +107,11 @@ def main():
         for epoch in range(epochs):
             avg_cost = 0.
             sum_t_c = 0.
+            beta = None
 
             for batch_train_x,  batch_train_y in train_dl:
-                emb = None
                 t_c = time.time()
-                cost, emb = model.partial_fit(batch_train_x)
+                cost, beta = model.partial_fit(batch_train_x)
                 c_elap = time.time() - t_c
 
                 # Compute average loss
@@ -123,62 +127,56 @@ def main():
             # Display logs per epoch step
             if epoch % d_step == 0:
                 avg_accuracy = 0.
-                avg_precision = [0.] * 3
-                avg_recall = [0.] * 3
-                avg_f1_score = [0.] * 3
+                avg_precision = [0.] * n_latent
+                avg_recall = [0.] * n_latent
+                avg_f1_score = [0.] * n_latent
 
-                # for batch_train_x,  batch_train_y in train_dl:
-                #     # Compute accuracy
-                #     batch_train_theta = model.topic_prop(batch_train_x)
-                #     batch_train_theta = np.argmax(batch_train_theta, axis=1)
+                for batch_train_x,  batch_train_y in train_dl:
+                    # Compute accuracy
+                    batch_train_theta = model.topic_prop(batch_train_x)
+                    batch_train_theta = np.argmax(batch_train_theta, axis=1)
 
-                #     accuracy, precision, recall, f1_score = \
-                #         utils.classification_evaluate(batch_train_theta, batch_train_y, ['food', 'staff', 'ambience'], show=False)
-                #     avg_accuracy += accuracy / len(train_ds) * bs
+                    accuracy, precision, recall, f1_score = \
+                        utils.classification_evaluate(batch_train_theta, batch_train_y, ['food', 'staff', 'ambience'], show=False)
+                    avg_accuracy += accuracy / len(train_ds) * bs
 
-                #     for k in range(3):
-                #         avg_precision[k] += precision[k] / len(train_ds) * bs
-                #         avg_recall[k] += recall[k] / len(train_ds) * bs
-                #         avg_f1_score[k] += f1_score[k] / len(train_ds) * bs
+                    for k in range(n_latent):
+                        avg_precision[k] += precision[k] / len(train_ds) * bs
+                        avg_recall[k] += recall[k] / len(train_ds) * bs
+                        avg_f1_score[k] += f1_score[k] / len(train_ds) * bs
 
-                # theta_y_pred_te = []
-                # theta_label_te = []
-                # temp_theta_dump = None
-                # for batch_test_x,  batch_test_y in test_dl:
-                    # temp_theta_te = model.topic_prop(batch_test_x)
-                    # temp_theta_dump = temp_theta_te.copy()
-                    # del temp_theta_te
-                    # temp_theta_y_pred_te = np.argmax(temp_theta_dump, axis=1)
+                theta_y_pred_te = []
+                theta_label_te = []
+                for batch_test_x,  batch_test_y in test_dl:
+                    temp_theta_te = model.topic_prop(batch_test_x)
+                    temp_theta_y_pred_te = np.argmax(temp_theta_te, axis=1)
 
-                    # theta_y_pred_te.extend(temp_theta_y_pred_te)
-                    # theta_label_te.extend(batch_test_y)
+                    theta_y_pred_te.extend(temp_theta_y_pred_te)
+                    theta_label_te.extend(batch_test_y)
 
-                # accuracy_te, precision_te, recall_te, f1_score_te = \
-                #     utils.classification_evaluate(theta_y_pred_te, theta_label_te, ['food', 'staff', 'ambience'], show=False)
-                # del temp_theta_dump
-                # del theta_y_pred_te
-                # del theta_label_te
+                accuracy_te, precision_te, recall_te, f1_score_te = \
+                    utils.classification_evaluate(theta_y_pred_te, theta_label_te, ['food', 'staff', 'ambience'], show=False)
 
-                # print("##################################################",
-                #       "\n",
-                #       "Epoch:", '%04d' % (epoch+1),
-                #       "\n",
-                #       "cost=", "{:.9f}".format(avg_cost),
-                #       "avg_accuracy=", "{:.9f}".format(avg_accuracy),
-                #       "accuracy_te=", "{:.9f}".format(accuracy_te),
-                #       "total_calculate=", "{:.4f}".format(sum_t_c))
-
-                # for k in range(3):
-                #     print("avg_precision_{}".format(k), "=", "{:.9f}".format(avg_precision[k]),
-                #           "avg_recall_{}".format(
-                #               k), "=", "{:.9f}".format(avg_recall[k]),
-                #           "avg_f1_score_{}".format(k), "=", "{:.9f}".format(avg_f1_score[k]))
-                #     print("precision_te{}".format(k), "=", "{:.9f}".format(precision_te[k]),
-                #           "recall_te{}".format(
-                #               k), "=", "{:.9f}".format(recall_te[k]),
-                #           "f1_score_te{}".format(k), "=", "{:.9f}".format(f1_score_te[k]))
-                # # calcPerp(vae)
-                # print("##################################################")
+                print("##################################################",
+                      "\n",
+                      "Epoch:", '%04d' % (epoch+1),
+                      "\n",
+                      "cost=", "{:.9f}".format(avg_cost),
+                      "avg_accuracy=", "{:.9f}".format(avg_accuracy),
+                      "accuracy_te=", "{:.9f}".format(accuracy_te),
+                      "total_calculate=", "{:.4f}".format(sum_t_c))
+                for k in range(3):
+                    print("avg_precision_{}".format(k), "=", "{:.9f}".format(avg_precision[k]),
+                          "avg_recall_{}".format(
+                              k), "=", "{:.9f}".format(avg_recall[k]),
+                          "avg_f1_score_{}".format(k), "=", "{:.9f}".format(avg_f1_score[k]))
+                    print("precision_te{}".format(k), "=", "{:.9f}".format(precision_te[k]),
+                          "recall_te{}".format(
+                              k), "=", "{:.9f}".format(recall_te[k]),
+                          "f1_score_te{}".format(k), "=", "{:.9f}".format(f1_score_te[k]))
+                # calcPerp(vae)
+                utils.print_top_words(beta, id_vocab, n_topwords)
+                print("##################################################")
 
             print("epoch={}, cost={:.9f}".format(epoch, avg_cost))
 

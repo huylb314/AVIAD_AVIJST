@@ -8,6 +8,17 @@ def read_seedword(seedword_path):
     with open(seedword_path, 'r') as f:
         return [l.replace('\n','').split(',') for l in f]
 
+def sort_values(dict):
+    return list(zip(*sorted(dict.items(), key=lambda item: item[1])))[0]
+
+def print_top_words(beta, id_vocab, n_top_words=30):
+    print ('---------------Printing the Topics------------------')
+    for i in range(len(beta)):
+        print(" ".join([id_vocab[j]
+            for j in beta[i].argsort()[:-n_top_words - 1:-1]]))
+        print('**********')
+    print ('---------------End of Topics------------------')
+
 def classification_evaluate(y_pred, y_true, labels, show=True):
     accuracy = metrics.accuracy_score(y_true, y_pred)
     precision, recall, f1_score, support = metrics.precision_recall_fscore_support(\
