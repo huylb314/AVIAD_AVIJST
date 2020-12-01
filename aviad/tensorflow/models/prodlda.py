@@ -11,7 +11,7 @@ def xavier_init(fan_in, fan_out, constant=1):
 def log_dir_init(fan_in, fan_out, topics=50):
     return tf.log((1.0/topics)*tf.ones([fan_in, fan_out]))
 
-
+tf.reset_default_graph()
 class ProdLDA(object):
     """
     See "Auto-Encoding Variational Bayes" by Kingma and Welling for more details.
@@ -31,7 +31,7 @@ class ProdLDA(object):
         self.prior, prior_bin = data_prior
         self.x = tf.placeholder(tf.float32, [None, n_input])
         self.x_bin = self._get_data_bin(self.x, self.prior, prior_bin)
-        self.dropout_rate = tf.placeholder(tf.float32)
+        self.keep_prob = tf.placeholder(tf.float32)
 
         self.a = 1*np.ones((1, self.n_z)).astype(np.float32)
         self.mu2 = tf.constant((np.log(self.a).T-np.mean(np.log(self.a), 1)).T)
@@ -77,7 +77,7 @@ class ProdLDA(object):
             'out_log_sigma': tf.Variable(tf.zeros([n_z], dtype=tf.float32))
         }
         all_weights['weights_dec'] = {
-            'h1': tf.Variable(xavier_init(n_z, n_input))
+            'h1': tf.Variable(xavier_init(n_z, n_hidden_dec_1))
         }
         return all_weights
 
@@ -94,12 +94,11 @@ class ProdLDA(object):
         return (z_mean, z_log_sigma_sq)
 
     def _decoder_network(self, z, weights):
-        self.layer_dec_do = tf.nn.dropout(tf.nn.softmax(z), self.dropout_rate)
-        x_reconstr_mean = tf.nn.softmax(tf.contrib.layers.batch_norm(tf.add(tf.matmul(self.layer_dec_do, weights['h1']), 0.0)))
+        layer_dec_do = tf.nn.dropout(tf.nn.softmax(z), self.dropout_rate)
+        x_reconstr_mean = tf.nn.softmax(tf.contrib.layers.batch_norm(tf.add(tf.matmul(layer_dec_do, weights['h1']), 0.0)))
         return x_reconstr_mean
 
     def _prior_loss(self, prior, weights):
-        self.prior_loss = 0
         W, b = weights[0], weights[1]
         W1 = self.transfer_fct(tf.add(W['h1'], b['b1']))
         W2 = self.transfer_fct(tf.add(tf.matmul(W1, W['h2']), b['b2']))
@@ -131,26 +130,26 @@ class ProdLDA(object):
         return tf.cast(data_bin, dtype=tf.float32)
 
     def partial_fit(self, X):
-        opt, cost, emb = self.sess.run((self.optimizer, self.cost, 
+        opt, cost, beta = self.sess.run((self.optimizer, self.cost, 
                                         self.network_weights['weights_dec']['h1']), \
-                                        feed_dict={self.x: X, self.dropout_rate: 0.5})
-        return cost, emb
+                                        feed_dict={self.x: X, self.keep_prob: 0.4})
+        return cost, beta
 
     def gamma_test(self):
         """Test the model and return the lowerbound on the log-likelihood.
         """
-        gamma = self.sess.run((self.Wo), feed_dict={self.dropout_rate: 0.0})
+        gamma = self.sess.run((self.Wo), feed_dict={self.keep_prob: 1.0})
         return gamma
 
     def test(self, X):
         """Test the model and return the lowerbound on the log-likelihood.
         """
-        cost = self.sess.run((self.cost), feed_dict={self.x: X, self.dropout_rate: 0.0})
+        cost = self.sess.run((self.cost), feed_dict={self.x: X, self.keep_prob: 1.0})
         return cost
 
     def topic_prop(self, X):
-        """Theta_ is the topic proportion vector. Apply softmax transformation to it before use.
+        """Theta is the topic proportion vector. Apply softmax transformation to it before use.
         """
-        theta_ = self.sess.run((tf.nn.softmax(self.z_mean)), \
-                                feed_dict={self.x: X, self.dropout_rate: 0.0})
-        return theta_
+        theta = self.sess.run((tf.nn.softmax(self.z_mean)), \
+                                feed_dict={self.x: X, self.keep_prob: 1.0})
+        return theta
