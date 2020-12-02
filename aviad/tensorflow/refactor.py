@@ -51,6 +51,7 @@ def main():
         config_dataset['folder-path'], config_dataset['vocab-file'])
     seedword_path = osp.join(
         config_dataset['folder-path'], config_dataset['sw-file'])
+    labels = config_dataset['labels']
 
     # model
     config_model = config['model']
@@ -103,11 +104,11 @@ def main():
             URSADataset(dataset_x[ds_test_idx], dataset_y[ds_test_idx], tfms_x, tfms_y)
         
         train_dl, test_dl = DataLoader(train_ds, bs), DataLoader(test_ds, bs)
+        beta = None
 
         for epoch in range(epochs):
             avg_cost = 0.
             sum_t_c = 0.
-            beta = None
 
             for batch_train_x,  batch_train_y in train_dl:
                 t_c = time.time()
@@ -126,59 +127,17 @@ def main():
 
             # Display logs per epoch step
             if epoch % d_step == 0:
-                avg_accuracy = 0.
-                avg_precision = [0.] * n_latent
-                avg_recall = [0.] * n_latent
-                avg_f1_score = [0.] * n_latent
-
-                for batch_train_x,  batch_train_y in train_dl:
-                    # Compute accuracy
-                    batch_train_theta = model.topic_prop(batch_train_x)
-                    batch_train_theta = np.argmax(batch_train_theta, axis=1)
-
-                    accuracy, precision, recall, f1_score = \
-                        utils.classification_evaluate(batch_train_theta, batch_train_y, ['food', 'staff', 'ambience'], show=False)
-                    avg_accuracy += accuracy / len(train_ds) * bs
-
-                    for k in range(n_latent):
-                        avg_precision[k] += precision[k] / len(train_ds) * bs
-                        avg_recall[k] += recall[k] / len(train_ds) * bs
-                        avg_f1_score[k] += f1_score[k] / len(train_ds) * bs
-
-                theta_y_pred_te = []
-                theta_label_te = []
-                for batch_test_x,  batch_test_y in test_dl:
-                    temp_theta_te = model.topic_prop(batch_test_x)
-                    temp_theta_y_pred_te = np.argmax(temp_theta_te, axis=1)
-
-                    theta_y_pred_te.extend(temp_theta_y_pred_te)
-                    theta_label_te.extend(batch_test_y)
-
-                accuracy_te, precision_te, recall_te, f1_score_te = \
-                    utils.classification_evaluate(theta_y_pred_te, theta_label_te, ['food', 'staff', 'ambience'], show=False)
-
-                print("##################################################",
+                print("##################################################")
+                print("Epoch:", '%04d' % (epoch+1),
                       "\n",
-                      "Epoch:", '%04d' % (epoch+1),
-                      "\n",
-                      "cost=", "{:.9f}".format(avg_cost),
-                      "avg_accuracy=", "{:.9f}".format(avg_accuracy),
-                      "accuracy_te=", "{:.9f}".format(accuracy_te),
-                      "total_calculate=", "{:.4f}".format(sum_t_c))
-                for k in range(3):
-                    print("avg_precision_{}".format(k), "=", "{:.9f}".format(avg_precision[k]),
-                          "avg_recall_{}".format(
-                              k), "=", "{:.9f}".format(avg_recall[k]),
-                          "avg_f1_score_{}".format(k), "=", "{:.9f}".format(avg_f1_score[k]))
-                    print("precision_te{}".format(k), "=", "{:.9f}".format(precision_te[k]),
-                          "recall_te{}".format(
-                              k), "=", "{:.9f}".format(recall_te[k]),
-                          "f1_score_te{}".format(k), "=", "{:.9f}".format(f1_score_te[k]))
-                # calcPerp(vae)
+                      "cost=", "{:.9f}".format(avg_cost))
                 utils.print_top_words(beta, id_vocab, n_topwords)
                 print("##################################################")
 
             print("epoch={}, cost={:.9f}".format(epoch, avg_cost))
+
+        utils.classification_evaluate_dl(model, train_dl, n_latent, labels, show=True)
+        utils.classification_evaluate_dl(model, test_dl, n_latent, labels, show=True)
 
 
 if __name__ == "__main__":

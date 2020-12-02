@@ -34,4 +34,33 @@ def classification_evaluate(y_pred, y_true, labels, show=True):
             print ("precision={}, recall={}, f1_score={}, support={}"\
                   .format(iprecision, irecall, if1_score, isupport))
 
-    return (accuracy, precision, recall, f1_score)
+    return (accuracy, precision, recall, support, f1_score)
+
+def classification_evaluate_dl(model, dl, n_latent, labels, show=True):
+    avg_accuracy = 0.
+    avg_precision = [0.] * n_latent
+    avg_recall = [0.] * n_latent
+    dl_support = [0] * n_latent
+    avg_f1_score = [0.] * n_latent
+    for x_,  y_ in dl:
+        # Compute accuracy
+        theta_ = model.topic_prop(x_)
+        theta_ = np.argmax(theta_, axis=1)
+
+        accuracy, precision, recall, support, f1_score = \
+            classification_evaluate(theta_, y_, labels, show=False)
+        avg_accuracy += accuracy / len(dl.ds) * dl.bs
+        for i in range(n_latent):
+            avg_precision[i] += precision[i] / len(dl.ds) * dl.bs
+            avg_recall[i] += recall[i] / len(dl.ds) * dl.bs
+            dl_support[i] += support[i]
+            avg_f1_score[i] += f1_score[i] / len(dl.ds) * dl.bs
+    if show:
+        print ("dl.ds: ", len(dl.ds), "supports: ", np.sum(dl_support))
+        print ("avg_accuracy", "=", "{:.9f}".format(avg_accuracy))
+        for i in range(n_latent):
+            print("avg_precision_{}".format(i), "=", "{:.9f}".format(avg_precision[i]),
+                  "avg_recall_{}".format(i), "=", "{:.9f}".format(avg_recall[i]),
+                  "dl_support_{}".format(i), "=", "{:d}".format(dl_support[i]),
+                  "avg_f1_score_{}".format(i), "=", "{:.9f}".format(avg_f1_score[i]))
+
