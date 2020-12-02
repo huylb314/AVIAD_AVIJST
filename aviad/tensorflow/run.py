@@ -82,10 +82,9 @@ def main():
             gamma_prior[idx_vocab, idx_topic] = 1.0  # V x K
             gamma_prior_batch[:, idx_vocab, :] = 1.0  # N x V x K
 
-    # define model
     model = ProdLDA(n_encoder_1, n_encoder_2, 
-                    vocab_size, vocab_size, n_latent, 
-                    data_prior=(gamma_prior, gamma_indices), ld=ld, al=al, lr=lr, bs=bs, dr=dr)
+                    vocab_size, n_latent, 
+                    gamma_prior=gamma_prior, ld=ld, al=al, lr=lr, dr=dr)
 
     for ds_train_idx, ds_test_idx in splitted_data:
         train_ds, test_ds = URSADataset(dataset_x[ds_train_idx], dataset_y[ds_train_idx], tfms_x, tfms_y), \
