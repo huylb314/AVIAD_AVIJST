@@ -1,0 +1,25 @@
+dataset:
+  name: 'ursa'
+  folder-path: 'data/User Review Structure Analysis (URSA)/10k'
+  data-file: 'train.txt.npy'
+  vocab-file: 'vocab.pkl'
+  sw-file: 'seed_words.txt' # seed words 'food', 'staff', 'ambience'
+  labels: ['food', 'staff', 'ambience']
+
+model:
+  name: 'aviad'
+  n_encoder_1: 100
+  n_encoder_2: 100
+  n_latent: 3 # match the number of aspects ('food', 'staff', 'ambience')
+  dropout: 0.6
+  lambda: 20.0
+  alpha: 1.0
+
+training:
+  lr: 0.0005  # 0.002
+  bs: 100
+  d_step: 50
+  epochs: 300 # 20
+  n_topwords: 50
+  ratio: 0.2
+  exp: 1

@@ -8,6 +8,16 @@ def read_seedword(seedword_path):
     with open(seedword_path, 'r') as f:
         return [l.replace('\n','').split(',') for l in f]
 
+def indicify_seedword(seedwords, vocab, vocab_size, n_latent):
+    gamma_prior = np.zeros((vocab_size, n_latent))
+    word_indices = []
+    for idx_topic, seed_topic in enumerate(seedwords):
+        for idx_word, seed_word in enumerate(seed_topic):
+            idx_vocab = vocab[seed_word]
+            gamma_prior[idx_vocab, idx_topic] = 1.0  # V x K
+            word_indices.append(idx_vocab)
+    return gamma_prior, word_indices
+
 def sort_values(dict):
     return list(zip(*sorted(dict.items(), key=lambda item: item[1])))[0]
 

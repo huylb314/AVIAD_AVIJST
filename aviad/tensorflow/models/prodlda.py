@@ -27,13 +27,15 @@ class ProdLDA(object):
         self.learning_rate = lr
         self.ld = ld
         self.al = al
-        self.batch_size = bs
+        self.bs = bs
         self.dr = dr
 
         # tf Graph input
-        self.prior, prior_bin = data_prior
+        self.prior, self.prior_indices = data_prior
+        self.prior_bin = tf.placeholder(tf.bool, [None, n_input, n_z])
+        self.bx = tf.placeholder(tf.int32)
         self.x = tf.placeholder(tf.float32, [None, n_input])
-        self.x_bin = self._get_data_bin(self.x, self.prior, prior_bin)
+        self.x_bin = self._get_data_bin(self.x)
         self.keep_prob = tf.placeholder(tf.float32)
         self.lambda_ = tf.placeholder(tf.float32)
 
@@ -58,7 +60,7 @@ class ProdLDA(object):
         self.z_mean, self.z_log_sigma_sq = \
             self._encoder_network(self.network_weights["weights_enc"], 
                                   self.network_weights["biases_enc"])
-        eps = tf.random_normal((self.batch_size, self.n_z), 0, 1, dtype=tf.float32)
+        eps = tf.random_normal((self.bx, self.n_z), 0, 1, dtype=tf.float32)
         self.z = tf.add(self.z_mean,
                         tf.multiply(tf.sqrt(tf.exp(self.z_log_sigma_sq)), eps))
         self.sigma = tf.exp(self.z_log_sigma_sq)
@@ -126,16 +128,19 @@ class ProdLDA(object):
         self.optimizer = \
             tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.99).minimize(self.cost)
 
-    def _get_data_bin(self, data, gamma, gamma_bin):
-        data_bool = tf.expand_dims(tf.greater(data, 0), 2)
-        data_bin = tf.logical_and(data_bool, gamma_bin)
+    def _get_data_bin(self, data):
+        data_boolean = tf.expand_dims(tf.greater(data, 0), 2)
+        data_binarized = tf.logical_and(data_boolean, self.prior_bin)
 
-        return tf.cast(data_bin, dtype=tf.float32)
+        return tf.cast(data_binarized, dtype=tf.float32)
 
-    def partial_fit(self, X):
+    def partial_fit(self, X, prior_bin):
+        N, V = X.shape
+        prior_bin = prior_bin[:N]
         opt, cost, beta = self.sess.run((self.optimizer, self.cost, 
                                         self.network_weights['weights_dec']['h1']), \
-                                        feed_dict={self.x: X, self.keep_prob: 1.0 - self.dr, self.lambda_: self.ld})
+                                        feed_dict={self.x: X, self.keep_prob: 1.0 - self.dr, \
+                                            self.lambda_: self.ld, self.bx: N, self.prior_bin: prior_bin})
         return cost, beta
 
     def gamma_test(self):

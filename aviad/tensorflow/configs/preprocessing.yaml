@@ -1,0 +1,22 @@
+dataset:
+  name: 'ursa'
+  folder-path: 'data/User Review Structure Analysis (URSA)/'
+  data-file: 'Classified_Corpus.xml'
+
+xml:
+  review: './/Review'
+  polarity: ['Positive', 'Negative', 'Neutral']
+  food: 'Food'
+  staff: 'Staff'
+  ambience: 'Ambience'
+
+label:
+  food: 0
+  staff: 1
+  ambience: 2
+
+number:
+  food: -1
+  staff: -1
+  ambience: -1
+  min_freq: -1

@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn import metrics
+import math
 
 # fastai utility
 def listify(o):
@@ -13,6 +14,20 @@ def compose(x, funcs, *args, **kwargs):
     for f in listify(funcs): 
         x = f(x, **kwargs)
     return x
+
+class Onehotify():
+    def __init__(self, vocab_size):
+        self.vocab_size = vocab_size
+    def __call__(self, item):
+        return np.bincount(item, minlength=self.vocab_size)
+
+class YToOnehot():
+    def __init__(self, num_classes):
+        self.num_classes = num_classes
+    def __call__(self, item):
+        categorical = np.zeros((1, self.num_classes))
+        categorical[0, item] = 1
+        return categorical
 
 class URSADataset():
     def __init__(self, x, y, tfms_x, tfms_y): 
