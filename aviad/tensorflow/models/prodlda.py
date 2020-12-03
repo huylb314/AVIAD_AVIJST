@@ -105,7 +105,6 @@ class ProdLDA(object):
         W2 = tf.nn.softplus(tf.add(tf.matmul(W1, W['h2']), b['b2']))
         Wdr = tf.nn.dropout(W2, self.keep_prob)
         Wo = tf.nn.softmax(tf.contrib.layers.batch_norm(tf.add(tf.matmul(Wdr, W['out_mean']), b['out_mean'])))
-
         self.Wo = Wo
         self.gamma_prior_loss = self.lambda_ * tf.reduce_sum((gamma_prior - self.x_binarized*Wo)**2, [1, 2])
         return self.gamma_prior_loss
@@ -126,17 +125,17 @@ class ProdLDA(object):
 
     def _get_data_bin(self, data):
         data_boolean = tf.expand_dims(tf.greater(data, 0), 2)
-        data_binarized = tf.logical_and(data_boolean, self.x_gamma_prior)
+        data_gamma_boolean = tf.logical_and(data_boolean, self.x_gamma_prior)
 
-        return tf.cast(data_binarized, dtype=tf.float32)
+        return tf.cast(data_gamma_boolean, dtype=tf.float32)
 
-    def partial_fit(self, X, gamma_prior_binarized):
+    def partial_fit(self, X, gamma_prior_bin_full_batch):
         N, V = X.shape
-        x_gamma_prior = gamma_prior_binarized[:N]
+        x_gamma_prior = gamma_prior_bin_full_batch[:N] # _ x V x K
         opt, cost, beta = self.sess.run((self.optimizer, self.cost, 
                                         self.network_weights['w_dec']['h1']), \
                                         feed_dict={self.x: X, self.keep_prob: 1.0 - self.dr, \
-                                            self.lambda_: self.ld, self.b: N, self.x_gamma_prior: gamma_prior_binarized})
+                                            self.lambda_: self.ld, self.b: N, self.x_gamma_prior: x_gamma_prior})
         return cost, beta
 
     def gamma_test(self):
