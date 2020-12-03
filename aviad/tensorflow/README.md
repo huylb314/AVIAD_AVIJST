@@ -65,6 +65,10 @@ Run the `prodLDA` model in the `URSA` dataset, which `-m : model name`, `-b : ba
 
 The results will be saved in `results/ursa` with the folder name for each epoch.
 
+python -c "import nltk; nltk.download('punkt')"
+python -c "import nltk; nltk.download('stopwords')"
+
+
 ### Topic Coherent Evaluate
 Compute topic coherent for `URSA` results, we use package implemented by [Jey Han Lau, David Newman and Timothy Baldwin (2014)](https://github.com/jhlau/topic_interpretability.git)
 

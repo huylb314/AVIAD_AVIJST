@@ -5,7 +5,7 @@ import os
 # Any constant variables are attribute ONCE
 const.PRINT_STATUS = True
 
-const.FOLDER_DATASET = './data/User Review Structure Analysis (URSA)/1k'
+const.FOLDER_DATASET = './data/User Review Structure Analysis (URSA)/'
 
 const.TRAIN_FILENAME_SAVE = 'train.txt.npy'
 const.VOCAB_FILENAME_SAVE = 'vocab.pkl'

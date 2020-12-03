@@ -1,46 +1,26 @@
-"""
-CORPUS XML: http://spidr-ursa.rutgers.edu/
-
-Restaurant (1 - n) Reviews
-Review (1 - n) Aspects
-
-Review: Document
-Aspect: Sentence
-"""
 import xml.etree.ElementTree as ET
 from xml import etree
 
+import yaml
+import argparse
 import numpy as np
 import pickle
 import os
+import os.path as osp
 
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from nltk import word_tokenize,sent_tokenize, pos_tag
 from nltk.corpus import sentiwordnet as swn
+import re
 
 import constants_aspects_analysis as constants
 import preprocess_helper as helper
 
-from data_logger import DataLogger
-import re
+def nested_text_xml(xml):
+    return ' '.join([xml_text for xml_text in xml.itertext()])
 
-data_logger_util = DataLogger()
-
-MESSAGE="""
-Make sure FOLDER_DATASET is the main folder dataset(where Classified_Corpus.xml is located), not the sub folder(1k,2k...).\n
-Because we want to reduce the amount of data upload .
-        """
-
-print (MESSAGE)
-
-def find_listxml(acorpus, aname_tag):
-    return acorpus.findall(aname_tag)
-
-def string_nested_xml(axml):
-    return ' '.join([the_aiter for the_aiter in axml.itertext()])
-
-def get_firstchild(axml):
+def firstchild(axml):
     try:
         if len(axml.getchildren()) > 0:
             return axml.getchildren()[0].tag
@@ -49,21 +29,20 @@ def get_firstchild(axml):
     except Exception as e:
         print (str(e))
 
-def xml_unique_valid(axml, alist_tag_allowed):
-    return (len(axml.getchildren()) == 0) or (get_firstchild(axml) in alist_tag_allowed)
+def xml_unique_valid(xml, tag_allowed):
+    return (len(xml.getchildren()) == 0) or (firstchild(xml) in tag_allowed)
 
-def get_listsentence_unique(alist_xml, alist_tag_allowed):
-    the_listsentence = []
-    for the_axml in alist_xml:
-        if xml_unique_valid(the_axml, alist_tag_allowed):
-            the_listsentence.append(string_nested_xml(the_axml))
-
-    return the_listsentence
+def xmls_unique(xmls, tag_allowed):
+    ret = []
+    for xml in xmls:
+        if xml_unique_valid(xml, tag_allowed):
+            ret.append(nested_text_xml(xml))
+    return ret
 
 def xml_name_valid(axml, atag_name):
     return axml.tag == atag_name
 
-def get_listxml_child(alist_xml, atag_name):
+def xmls_child(alist_xml, atag_name):
     the_listreturn = []
     for the_axml in alist_xml:
         for the_achild in the_axml:
@@ -72,45 +51,75 @@ def get_listxml_child(alist_xml, atag_name):
 
     return the_listreturn
 
-def data_process():
-# if __name__ == '__main__':
-    helper.variable_information(constants.const, constants.const.PRINT_STATUS)
+def main():
+    # Hyper Parameters
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default="configs/aviad/ursa/preprocessing.yaml",
+                        help="Which configuration to use. See into 'config' folder")
 
-    corpus_tree = ET.parse(constants.const.CORPUS_XML_FILE_LOCATION)
+    opt = parser.parse_args()
+
+    with open(opt.config, 'r') as ymlfile:
+        config = yaml.load(ymlfile, Loader=yaml.FullLoader)
+    print(config)
+
+    # dataset
+    config_dataset = config['dataset']
+    dataset_name = config_dataset['name']
+    dataset_folder_path = config_dataset['folder-path']
+    dataset_data_file = config_dataset['data-file']
+    dataset_data_path = osp.join(dataset_folder_path, dataset_data_file)
+
+    # xml
+    config_tagxml = config['tagxml']
+    tagxml_review = config_tagxml['review']
+    tagxml_polarity = config_tagxml['polarity']
+    tagxml_food = config_tagxml['food']
+    tagxml_staff = config_tagxml['staff']
+    tagxml_ambience = config_tagxml['ambience']
+
+    # label
+    config_label = config['label']
+    label_food = config_label['food']
+    label_staff = config_label['staff']
+    label_ambience = config_label['ambience']
+
+    # limit
+    config_limit = config['limit']
+    limit_food = config_limit['food']
+    limit_staff = config_limit['staff']
+    limit_ambience = config_limit['ambience']
+    limit_min_freq = config_limit['min_freq']
+
+    corpus_tree = ET.parse(dataset_data_path)
     corpus = corpus_tree.getroot()
 
-    listdocument = find_listxml(corpus, constants.const.TAG_XML_REVIEW)
+    xmls = corpus.findall(tagxml_review)
 
-    listxml_child_food = get_listxml_child(listdocument, \
-                                          constants.const.TAG_NAME_FOOD)
-    listxml_child_staff = get_listxml_child(listdocument, \
-                                           constants.const.TAG_NAME_STAFF)
-    listxml_child_ambience = get_listxml_child(listdocument, \
-                                              constants.const.TAG_NAME_AMBIENCE)
+    xmls_food = xmls_child(xmls, tagxml_food)
+    xmls_staff = xmls_child(xmls, tagxml_staff)
+    xmls_ambience = xmls_child(xmls, tagxml_ambience)
 
-    helper.print_length_variables([listxml_child_food, listxml_child_staff, listxml_child_ambience], \
-                                   ['listxml_child_food', 'listxml_child_staff', 'listxml_child_ambience'], \
-                                   constants.const.PRINT_STATUS)
+    print (len(xmls_food))
+    print (len(xmls_staff))
+    print (len(xmls_ambience))
 
-    ##### FOOD ##### STAFF ##### AMBIENCE
-    listxml_unique_food = get_listsentence_unique(listxml_child_food, \
-                                                    constants.const.TAG_NAME_POLARITY_ALLOWED)
-    listxml_unique_staff = get_listsentence_unique(listxml_child_staff, \
-                                                  constants.const.TAG_NAME_POLARITY_ALLOWED)
-    listxml_unique_ambience = get_listsentence_unique(listxml_child_ambience, \
-                                                  constants.const.TAG_NAME_POLARITY_ALLOWED)
+    xmls_unique_food = xmls_unique(xmls_food, tagxml_food)
+    xmls_unique_staff = xmls_unique(xmls_staff, tagxml_staff)
+    xmls_unique_ambience = xmls_unique(xmls_ambience, tagxml_ambience)
 
-    helper.print_length_variables([listxml_unique_food, listxml_unique_staff, listxml_unique_ambience], \
-                                  ['listxml_unique_food', 'listxml_unique_staff', 'listxml_unique_ambience'], \
-                                  constants.const.PRINT_STATUS)
+    print (len(xmls_unique_food))
+    print (len(xmls_unique_staff))
+    print (len(xmls_unique_ambience))
 
-    listprocessed_food = helper.process_listtext(listxml_unique_food, \
+    exit()
+    listprocessed_food = helper.process_listtext(xmls_unique_food, \
                                                  constants.const.LENGTH_FOOD_ALLOWED, \
                                                  constants.const.FILE_LOG_FOOD_NOT_PASS_LOCATION)
-    listprocessed_staff = helper.process_listtext(listxml_unique_staff,\
+    listprocessed_staff = helper.process_listtext(xmls_unique_staff,\
                                                   constants.const.LENGTH_STAFF_ALLOWED,\
                                                   constants.const.FILE_LOG_STAFF_NOT_PASS_LOCATION)
-    listprocessed_ambience = helper.process_listtext(listxml_unique_ambience, \
+    listprocessed_ambience = helper.process_listtext(xmls_unique_ambience, \
                                                      constants.const.LENGTH_AMBIENCE_ALLOWED, \
                                                      constants.const.FILE_LOG_AMBIENCE_NOT_PASS_LOCATION)
 
@@ -141,3 +150,6 @@ def data_process():
     # Save Into File
     np.save (constants.const.TRAIN_FILE_LOCATION, list_onehot)
     data_logger_util.pickle(constants.const.VOCAB_FILE_LOCATION, vocab_dict)
+
+if __name__ == "__main__":
+    main()
