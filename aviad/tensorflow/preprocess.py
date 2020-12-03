@@ -1,5 +1,4 @@
 import xml.etree.ElementTree as ET
-from xml import etree
 
 import yaml
 import argparse
@@ -8,14 +7,87 @@ import pickle
 import os
 import os.path as osp
 
+import re
+import nltk
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
-from nltk import word_tokenize,sent_tokenize, pos_tag
 from nltk.corpus import sentiwordnet as swn
-import re
+from nltk import FreqDist
 
-import constants_aspects_analysis as constants
-import preprocess_helper as helper
+st = PorterStemmer()
+stopwords_eng = list(stopwords.words("english"))
+stopwords_addition = ["'s","...","'ve","``","''","'m",'--',"'ll","'d"]
+stopwords_eng = set(stopwords_eng + stopwords_addition)
+
+def alphabet(atext):
+    return re.sub("[^a-zA-Z]", " ", atext)
+
+def processify(s):
+    alphabeted_s = alphabet(s)
+    tokenized_s = nltk.word_tokenize(alphabeted_s.lower())
+    stemmed_s = [st.stem(w) for w in tokenized_s if w not in stopwords_eng]
+
+    return (stemmed_s, len(stemmed_s))
+
+def list_processify(sentences, len_allowed, logfile):
+    ret = []
+    with open(logfile, "w") as f:
+        for idx, sentence in enumerate(sentences):
+            processed_s, len_s = processify(sentence)
+            if len_s > len_allowed:
+                ret.append(processed_s)
+            else:
+                f.write( '## ' + str(idx) + ' ##\n')
+                f.write( '##:' + str(sentence) + '\n')
+                f.write( '##:' + str(processed_s) + '\n')
+                f.write( '##:' + str(len_s) + '\n')
+                f.write( '##-----------------------------\n')
+
+    return ret
+
+def labelify(x, y):
+    return (x, y)
+
+def list_labelify(datas, label):
+    ret = []
+    for data in datas:
+        ret.append(labelify(data, label))
+    return ret
+
+def word_valid(w):
+    return w not in [""," "]
+
+def create_vocab(sentences, min_freq):
+    words = []
+    for sentence in sentences:
+        for word in sentence:
+            words.append(word)
+    words_freq = FreqDist(words)
+    vocab = []
+    for word, freq in words_freq.items():
+        if freq > min_freq:
+            if word_valid(word):
+                vocab.append(word)
+
+    vocab_sorted = sorted(vocab)
+    #Assign a number corresponding to each word. Makes counting easier.
+    vocab_sorted_dict = dict(zip(vocab_sorted, range(len(vocab_sorted))))
+    return vocab_sorted, vocab_sorted_dict
+
+def onehotify(sentence, vocab, vocab_dict):
+    ret = []
+    for word in sentence:
+        if word in vocab:
+            ret.append(vocab_dict[word])
+    return ret
+
+def list_onehotify(data_labeled, id_vocab, vocab):
+    ret = []
+    for x_, y_ in data_labeled:
+        onehoted_x = onehotify(x_, id_vocab, vocab)
+        if onehoted_x != []:
+            ret.append((onehoted_x, y_))
+    return ret
 
 def nested_text_xml(xml):
     return ' '.join([xml_text for xml_text in xml.itertext()])
@@ -42,14 +114,13 @@ def xmls_unique(xmls, tag_allowed):
 def xml_name_valid(axml, atag_name):
     return axml.tag == atag_name
 
-def xmls_child(alist_xml, atag_name):
-    the_listreturn = []
-    for the_axml in alist_xml:
-        for the_achild in the_axml:
-            if xml_name_valid(the_achild, atag_name):
-                the_listreturn.append(the_achild)
-
-    return the_listreturn
+def xmls_child(xmlses, tagxml):
+    ret = []
+    for xmls in xmlses:
+        for xml in xmls:
+            if xml_name_valid(xml, tagxml):
+                ret.append(xml)
+    return ret
 
 def main():
     # Hyper Parameters
@@ -68,7 +139,11 @@ def main():
     dataset_name = config_dataset['name']
     dataset_folder_path = config_dataset['folder-path']
     dataset_data_file = config_dataset['data-file']
+    dataset_train_file = config_dataset['train-file']
+    dataset_vocab_file = config_dataset['vocab-file']
     dataset_data_path = osp.join(dataset_folder_path, dataset_data_file)
+    dataset_train_path = osp.join(dataset_folder_path, dataset_train_file)
+    dataset_vocab_path = osp.join(dataset_folder_path, dataset_vocab_file)
 
     # xml
     config_tagxml = config['tagxml']
@@ -91,11 +166,19 @@ def main():
     limit_ambience = config_limit['ambience']
     limit_min_freq = config_limit['min_freq']
 
+    # log
+    config_log = config['log']
+    log_food = config_log['food']
+    log_staff = config_log['staff']
+    log_ambience = config_log['ambience']
+    log_food_path = osp.join(dataset_folder_path, log_food)
+    log_staff_path = osp.join(dataset_folder_path, log_staff)
+    log_ambience_path = osp.join(dataset_folder_path, log_ambience)
+
     corpus_tree = ET.parse(dataset_data_path)
     corpus = corpus_tree.getroot()
 
     xmls = corpus.findall(tagxml_review)
-
     xmls_food = xmls_child(xmls, tagxml_food)
     xmls_staff = xmls_child(xmls, tagxml_staff)
     xmls_ambience = xmls_child(xmls, tagxml_ambience)
@@ -104,52 +187,46 @@ def main():
     print (len(xmls_staff))
     print (len(xmls_ambience))
 
-    xmls_unique_food = xmls_unique(xmls_food, tagxml_food)
-    xmls_unique_staff = xmls_unique(xmls_staff, tagxml_staff)
-    xmls_unique_ambience = xmls_unique(xmls_ambience, tagxml_ambience)
+    xmls_unique_food = xmls_unique(xmls_food, tagxml_polarity)
+    xmls_unique_staff = xmls_unique(xmls_staff, tagxml_polarity)
+    xmls_unique_ambience = xmls_unique(xmls_ambience, tagxml_polarity)
 
     print (len(xmls_unique_food))
     print (len(xmls_unique_staff))
     print (len(xmls_unique_ambience))
 
-    exit()
-    listprocessed_food = helper.process_listtext(xmls_unique_food, \
-                                                 constants.const.LENGTH_FOOD_ALLOWED, \
-                                                 constants.const.FILE_LOG_FOOD_NOT_PASS_LOCATION)
-    listprocessed_staff = helper.process_listtext(xmls_unique_staff,\
-                                                  constants.const.LENGTH_STAFF_ALLOWED,\
-                                                  constants.const.FILE_LOG_STAFF_NOT_PASS_LOCATION)
-    listprocessed_ambience = helper.process_listtext(xmls_unique_ambience, \
-                                                     constants.const.LENGTH_AMBIENCE_ALLOWED, \
-                                                     constants.const.FILE_LOG_AMBIENCE_NOT_PASS_LOCATION)
+    processed_food = list_processify(xmls_unique_food, limit_food, log_food_path)
+    processed_staff = list_processify(xmls_unique_staff, limit_staff, log_staff_path)
+    processed_ambience = list_processify(xmls_unique_ambience, limit_ambience, log_ambience_path)
 
-    helper.print_length_variables([listprocessed_food, listprocessed_staff, listprocessed_ambience], \
-                                  ['listprocessed_food', 'listprocessed_staff', 'listprocessed_ambience'], \
-                                  constants.const.PRINT_STATUS)
+    print (len(processed_food))
+    print (len(processed_staff))
+    print (len(processed_ambience))
 
-    listlabeled_food = helper.label_listdata(listprocessed_food, \
-                                             constants.const.LABEL_REVIEW_FOOD)
-    listlabeled_staff = helper.label_listdata(listprocessed_staff, \
-                                              constants.const.LABEL_REVIEW_STAFF)
-    listlabeled_ambience = helper.label_listdata(listprocessed_ambience, \
-                                                 constants.const.LABEL_REVIEW_AMBIENCE)
+    labeled_food = list_labelify(processed_food, label_food)
+    labeled_staff = list_labelify(processed_staff, label_staff)
+    labeled_ambience = list_labelify(processed_ambience, label_ambience)
 
-    helper.print_length_variables([listlabeled_food, listlabeled_staff, listlabeled_ambience], \
-                                  ['listlabeled_food', 'listlabeled_staff', 'listlabeled_ambience'], \
-                                  constants.const.PRINT_STATUS)
+    print (len(labeled_food))
+    print (len(labeled_staff))
+    print (len(labeled_ambience))
 
-    helper.print_listsample([listxml_unique_ambience, listprocessed_ambience, listlabeled_ambience], \
-                            ['listxml_unique_ambience', 'listprocessed_ambience', 'listlabeled_ambience'], \
-                            constants.const.SAMPLE_INDEX_FROM, constants.const.SAMPLE_INDEX_TO, constants.const.PRINT_STATUS)
+    print (xmls_unique_food[0])
+    print (xmls_unique_staff[0])
+    print (xmls_unique_ambience[0])
 
-    vocab, vocab_dict = helper.create_vocab_listsentence(listprocessed_food + listprocessed_staff + listprocessed_ambience, constants.const.MIN_FREQ_ALLOWED)
+    id_vocab, vocab = create_vocab(processed_food + \
+                                   processed_staff + \
+                                    processed_ambience, \
+                                    limit_min_freq)
 
-    list_onehot = helper.create_listonehot(listlabeled_food + listlabeled_staff + listlabeled_ambience, \
-                                           vocab, vocab_dict)
+    onehot_data = list_onehotify(labeled_food + labeled_staff + labeled_ambience, \
+                                id_vocab, vocab)
 
     # Save Into File
-    np.save (constants.const.TRAIN_FILE_LOCATION, list_onehot)
-    data_logger_util.pickle(constants.const.VOCAB_FILE_LOCATION, vocab_dict)
+    np.save (dataset_train_path, onehot_data)
+    with open(dataset_vocab_path, 'wb') as f:
+        pickle.dump(vocab, f)
 
 if __name__ == "__main__":
     main()
