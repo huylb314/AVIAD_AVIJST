@@ -23,4 +23,5 @@ training:
   n_topwords: 50
   ratio: 0.2
   exp: 1
-  result: 'ursa/1k'
+  result: 'results/ursa/1k'
+  write: True

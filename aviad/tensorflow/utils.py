@@ -1,7 +1,6 @@
 import numpy as np
 from sklearn import metrics
-
-
+import os
 
 def onehot(data, min_length):
     return np.bincount(data, minlength=min_length)
@@ -33,12 +32,16 @@ def calc_perp(model, dl, gamma_prior_batch):
         cost.append(c/n_d)
     print ('The approximated perplexity is: ',(np.exp(np.mean(np.array(cost)))))
 
-def print_top_words(beta, id_vocab, n_top_words=30):
+def print_top_words(epoch, beta, id_vocab, n_top_words, result, write):
     print ('---------------Printing the Topics------------------')
+    string_out = ""
     for i in range(len(beta)):
-        print(" ".join([id_vocab[j]
-            for j in beta[i].argsort()[:-n_top_words - 1:-1]]))
-        print('**********')
+        string_out += " ".join([id_vocab[j] for j in beta[i].argsort()[:-n_top_words - 1:-1]])
+        string_out += "\n"
+        print (string_out)
+        if write:
+            with open(os.path.join(result, "{}.txt".format(epoch)), 'w+') as fw:
+                fw.write(string_out)
     print ('---------------End of Topics------------------')
 
 def classification_evaluate(y_pred, y_true, labels, show=True):

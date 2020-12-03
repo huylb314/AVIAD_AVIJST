@@ -6,6 +6,7 @@ import time
 import math
 import sys
 import numpy as np
+import os
 import os.path as osp
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -57,6 +58,11 @@ def main():
     n_topwords = config_training['n_topwords']
     ratio = config_training['ratio']
     exp = config_training['exp']
+    result = config_training['result']
+    write = config_training['write']
+
+    # create result folders
+    os.makedirs(result, exist_ok=True)
 
     dataset = np.load(data_path)
     with open(vocab_path, 'rb') as vocabfile:
@@ -115,7 +121,7 @@ def main():
             if (epoch + 1) % d_step == 0:
                 print("##################################################")
                 print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
-                utils.print_top_words(beta, id_vocab, n_topwords)
+                utils.print_top_words(epoch + 1, beta, id_vocab, n_topwords, result, write)
                 utils.print_gamma(model, vocab, seedwords)
                 print("##################################################")
 
