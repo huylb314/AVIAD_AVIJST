@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn import metrics
 
+
+
 def onehot(data, min_length):
     return np.bincount(data, minlength=min_length)
 
@@ -8,18 +10,28 @@ def read_seedword(seedword_path):
     with open(seedword_path, 'r') as f:
         return [l.replace('\n','').split(',') for l in f]
 
-def indicify_seedword(seedwords, vocab, vocab_size, n_latent):
-    gamma_prior = np.zeros((vocab_size, n_latent))
-    word_indices = []
-    for idx_topic, seed_topic in enumerate(seedwords):
-        for idx_word, seed_word in enumerate(seed_topic):
-            idx_vocab = vocab[seed_word]
-            gamma_prior[idx_vocab, idx_topic] = 1.0  # V x K
-            word_indices.append(idx_vocab)
-    return gamma_prior, word_indices
-
 def sort_values(dict):
     return list(zip(*sorted(dict.items(), key=lambda item: item[1])))[0]
+
+def print_gamma(model, vocab, seedwords):
+    gamma = model.gamma_test()
+    np.set_printoptions(precision=3)
+    np.set_printoptions(suppress=False)
+    for idx_topic, seed_topic in enumerate(seedwords):
+        print ("idx topic: {}".format(idx_topic))
+        for idx_word, seed_word in enumerate(seed_topic):
+            idx_vocab = vocab[seed_word]
+            print ("(topic-{} word-\"{}\" id-{}): gamma={}".format(idx_topic, seed_word, idx_vocab, gamma[idx_vocab]))
+
+def calc_perp(model, dl, gamma_prior_batch):
+    cost=[]
+    np.set_printoptions(precision=10)
+    np.set_printoptions(suppress=False)
+    for x_,  y_ in dl:
+        n_d = np.sum(x_)
+        c = model.test(x_, gamma_prior_batch)
+        cost.append(c/n_d)
+    print ('The approximated perplexity is: ',(np.exp(np.mean(np.array(cost)))))
 
 def print_top_words(beta, id_vocab, n_top_words=30):
     print ('---------------Printing the Topics------------------')

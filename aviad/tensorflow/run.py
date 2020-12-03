@@ -66,7 +66,6 @@ def main():
     id_vocab = utils.sort_values(vocab)
     vocab_size = len(vocab)
     seedwords = utils.read_seedword(seedword_path)
-    gamma_prior, gamma_indices = utils.indicify_seedword(seedwords, vocab, vocab_size, n_latent)
     tfms_x = [Onehotify(vocab_size)]
     tfms_y = []
 
@@ -113,18 +112,19 @@ def main():
                     sys.exit()
 
             # Display logs per epoch step
-            if epoch % d_step == 0:
+            if (epoch + 1) % d_step == 0:
                 print("##################################################")
-                print("Epoch:", '%04d' % (epoch+1),
-                      "\n",
-                      "cost=", "{:.9f}".format(avg_cost))
+                print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
                 utils.print_top_words(beta, id_vocab, n_topwords)
+                utils.print_gamma(model, vocab, seedwords)
                 print("##################################################")
 
-            print("epoch={}, cost={:.9f}".format(epoch, avg_cost))
+            print("epoch={}, cost={:.9f}, sum_t_c={:.2f}".format((epoch + 1), avg_cost, sum_t_c))
 
         utils.classification_evaluate_dl(model, train_dl, n_latent, labels, show=True)
         utils.classification_evaluate_dl(model, test_dl, n_latent, labels, show=True)
+        utils.print_gamma(model, vocab, seedwords)
+        utils.calc_perp(model, test_dl, gamma_prior_batch)        
 
 
 if __name__ == "__main__":

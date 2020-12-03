@@ -17,9 +17,10 @@ model:
 
 training:
   lr: 0.0005  # 0.002
-  bs: 100
+  bs: 400
   d_step: 50
   epochs: 300 # 20
   n_topwords: 50
   ratio: 0.2
   exp: 1
+  result: 'ursa/1k'

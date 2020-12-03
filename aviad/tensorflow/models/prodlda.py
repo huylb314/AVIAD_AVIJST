@@ -140,10 +140,12 @@ class ProdLDA(object):
         gamma = self.sess.run((self.Wo), feed_dict={self.rate: .0, self.lambda_: self.ld})
         return gamma
 
-    def test(self, X):
+    def test(self, X, gamma_prior_bin_full_batch):
         """Test the model and return the lowerbound on the log-likelihood.
         """
-        cost = self.sess.run((self.cost), feed_dict={self.x: X, self.rate: .0, self.lambda_: self.ld})
+        N, V = X.shape
+        x_gamma_prior = gamma_prior_bin_full_batch[:N] # _ x V x K
+        cost = self.sess.run((self.cost), feed_dict={self.x: X, self.rate: .0, self.lambda_: self.ld, self.b: N, self.x_gamma_prior: x_gamma_prior})
         return cost
 
     def topic_prop(self, X):

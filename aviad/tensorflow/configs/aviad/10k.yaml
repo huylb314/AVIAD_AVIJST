@@ -1,6 +1,6 @@
 dataset:
   name: 'ursa'
-  folder-path: 'data/User Review Structure Analysis (URSA)/5k'
+  folder-path: 'data/User Review Structure Analysis (URSA)/10k'
   data-file: 'train.txt.npy'
   vocab-file: 'vocab.pkl'
   sw-file: 'seed_words.txt' # seed words 'food', 'staff', 'ambience'
@@ -17,9 +17,10 @@ model:
 
 training:
   lr: 0.0005  # 0.002
-  bs: 100
+  bs: 300
   d_step: 50
   epochs: 300 # 20
   n_topwords: 50
   ratio: 0.2
   exp: 1
+  result: 'ursa/10k'
