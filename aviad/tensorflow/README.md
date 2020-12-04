@@ -18,26 +18,9 @@ Applied Artificial Intelligence, 2019; 33(9), 796-816
 ### Introduction
 Autoencoding Variational Inference for Aspect Discovery (AVIAD) model, which extends the previous work of Autoencoding Variational In- ference for Topic Models (AVITM) to embed prior knowledge of seed words. This work includes enhancement of the previous AVI architecture and also modification of the loss function. Ultimately,
 
-### Citation
-If you find the code useful in your research, please cite:
-
-    @article{doi:10.1080/08839514.2019.1630148,
-         title={Towards Autoencoding Variational Inference for Aspect-Based Opinion Summary},
-         author={Tai Hoang and Huy Le and Tho Quan},
-         journal={Applied Artificial Intelligence},
-         volume = {33},
-         number = {9},
-         pages = {796-816},
-         year={2019}
-         publisher = {Taylor & Francis},
-         doi = {10.1080/08839514.2019.1630148},
-         URL = {https://doi.org/10.1080/08839514.2019.1630148},
-         eprint = {https://doi.org/10.1080/08839514.2019.1630148}
-    }
-
 ### Requirements and Dependencies
-- Ubuntu (We test with Ubuntu = 18.04.5 LTS)
-- Python (We test with Python = 3.6.8 in Anaconda3 = 4.1.1)
+- Ubuntu (We test with Ubuntu = 19.10)
+- Python (We test with Python = 3.6.10 in Anaconda3 = 4.8.3)
 
 ### Installation
 Download repository:
@@ -94,6 +77,22 @@ To preprocess the `URSA` dataset, configs are defined in yaml file
 ### Contact
 - [Huy Le](mailto:13520360@gm.uit.edu.vn)
 
+### Citation
+If you find the code useful in your research, please cite:
+
+    @article{doi:10.1080/08839514.2019.1630148,
+         title={Towards Autoencoding Variational Inference for Aspect-Based Opinion Summary},
+         author={Tai Hoang and Huy Le and Tho Quan},
+         journal={Applied Artificial Intelligence},
+         volume = {33},
+         number = {9},
+         pages = {796-816},
+         year={2019}
+         publisher = {Taylor & Francis},
+         doi = {10.1080/08839514.2019.1630148},
+         URL = {https://doi.org/10.1080/08839514.2019.1630148},
+         eprint = {https://doi.org/10.1080/08839514.2019.1630148}
+    }
 
 ### License
 See [MIT License](https://github.com/huylb314/AVIAD_AVIJST/blob/master/LICENSE)
