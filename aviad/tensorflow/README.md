@@ -52,36 +52,47 @@ Create anaconda environment `tf_aviad`
     
     $ conda env create -f environment.yml
 
-Create anaconda environment `py27`
-    
-    $ conda env create -f environment_py27.yml
-
 ### Experiments
-Run the `prodLDA` model in the `URSA` dataset, which `-m : model name`, `-b : batch size`, `-r : learning rate`, `-e : epoch number`:
+Run the `prodLDA` model in the `URSA` dataset, configs are defined in yaml file 
 
     $ cd aviad/tensorflow/
     $ source acitvate tf_aviad
-    $ python run_aspects_analysis.py -m prodlda -f 100 -s 100 -t 3 -b 200 -r 0.0005 -e 100
+    $ python run.py --config configs/1k.yaml
 
 The results will be saved in `results/ursa` with the folder name for each epoch.
-
-python -c "import nltk; nltk.download('punkt')"
-python -c "import nltk; nltk.download('stopwords')"
-
 
 ### Topic Coherent Evaluate
 Compute topic coherent for `URSA` results, we use package implemented by [Jey Han Lau, David Newman and Timothy Baldwin (2014)](https://github.com/jhlau/topic_interpretability.git)
 
     $ cd aviad/tensorflow/topic_coherent
-    $ source acitvate py27
-    $ ./clean.sh
-    $ ./evaluate_aviad.sh
-    
-These results will be saved in `oc` folder.
+    $ bash clean.sh
+    $ bash evaluate_aviad.sh -f ../results/ursa/1k/ -c ../corpus/ursa/ -n 3 -t 50
+
+```
+evaluate_aviad.sh
+-f : topwords folder
+-c : corpus folder
+-n : number of topics
+-t : number of coherent topwords
+```
+
+```
+Results:
+    oc folder: result file.
+    final_log.txt: summary scores.
+```
+
+### Preprocessing
+To preprocess the `URSA` dataset, configs are defined in yaml file 
+
+    $ cd aviad/tensorflow/
+    $ source acitvate tf_aviad
+    $ python -c "import nltk; nltk.download('punkt')"
+    $ python -c "import nltk; nltk.download('stopwords')"
+    $ python preprocess.py --config configs/preprocessing.yaml
 
 ### Contact
-- [Tai Hoang](mailto:13520193@gm.uit.edu.vn)
-- [Huy Le](mailto:13520360@gm.uit.edu.vn)
+- [Huy Le] email at 13520360@gm.uit.edu.vn | huylb314@gmail.com
 
 ### License
 See [MIT License](https://github.com/huylb314/AVIAD_AVIJST/blob/master/LICENSE)
