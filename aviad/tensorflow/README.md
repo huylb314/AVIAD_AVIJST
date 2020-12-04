@@ -92,7 +92,8 @@ To preprocess the `URSA` dataset, configs are defined in yaml file
     $ python preprocess.py --config configs/preprocessing.yaml
 
 ### Contact
-- [Huy Le] email at 13520360@gm.uit.edu.vn | huylb314@gmail.com
+- [Huy Le](mailto:13520360@gm.uit.edu.vn)
+
 
 ### License
 See [MIT License](https://github.com/huylb314/AVIAD_AVIJST/blob/master/LICENSE)
