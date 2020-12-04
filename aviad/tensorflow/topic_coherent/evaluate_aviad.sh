@@ -1,9 +1,22 @@
 #!/bin/bash
 
+while getopts f:c:n:t: flag
+do
+    case "${flag}" in
+        f) folder=${OPTARG};;
+        c) corpus=${OPTARG};;
+		n) topics=${OPTARG};;
+		t) top=${OPTARG};;
+    esac
+done
+echo "folder: $folder";
+echo "corpus: $corpus";
+echo "topics: $topics";
+echo "top: $top";
+
 # Setup Directories
 # =================
-dataset_used=(ursa)
-labels_used=(3)
+dataset_used=(temp)
 run_time=(1)
 model_used=(aviad)
 
@@ -44,12 +57,10 @@ if [[ -d ./wc ]]; then
 		model=${model_used[model_idx]}
 		for idx in ${!dataset_used[@]}; do
 			dataset=${dataset_used[idx]}
-			labels_used=${labels_used[idx]}
 			for i in ${run_time[@]}; do
-				python ComputeOcTopwords.py --topic_folder ../results/$dataset \
-				--topic_processed ../results/$dataset \
-				--wc_folder wc/$model/$dataset/run$i --ref_corpus_dir ../corpus/$dataset \
-				--oc_folder oc/$model/$dataset/run$i --number_topic 3 --number_label $labels_used
+				python compute_oc_topwords.py --topns $top --metric npmi --topic_folder $folder \
+				--wc_folder wc/$model/$dataset/run$i --ref_corpus_dir $corpus \
+				--oc_folder oc/$model/$dataset/run$i --number_topic $topics
 			done;
 		done;
 	done;

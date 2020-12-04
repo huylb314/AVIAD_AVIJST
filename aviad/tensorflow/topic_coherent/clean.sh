@@ -31,3 +31,7 @@ fi
 if [[ -d oc ]]; then
 	rm -rf oc;
 fi
+
+if [[ -f final_log.txt ]]; then
+	rm final_log.txt;
+fi
