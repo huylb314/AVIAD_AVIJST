@@ -12,7 +12,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import utils
 from models import AVIAD
-from data import URSADataset, Onehotify, Onehotify, Tensorify, Floatify, Cudify
+from data import URSADataset, Onehotify, YOnehotify, Tensorify, Floatify, Cudify
 
 from torchvision.transforms import Compose
 from torch.utils.data import DataLoader
@@ -134,17 +134,17 @@ def main():
                 print("##################################################")
                 print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
                 utils.print_top_words(epoch + 1, beta, id_vocab, n_topwords, result, write)
-                gamma = model.gamma_test()
-                utils.print_gamma(gamma.data.cpu().numpy(), vocab, seedwords)
                 print("##################################################")
 
+            print("epoch={}, cost={:.9f}, sum_t_c={:.2f}".format((epoch + 1), avg_cost, sum_t_c))
+
         model.eval()
-        utils.classification_evaluate_dl(model, train_dl, n_latent, labels, show=True)
-        utils.classification_evaluate_dl(model, test_dl, n_latent, labels, show=True)
         gamma = model.gamma_test()
         utils.print_gamma(gamma.data.cpu().numpy(), vocab, seedwords)
+        utils.classification_evaluate_dl(model, train_dl, n_latent, labels, show=True)
+        utils.classification_evaluate_dl(model, test_dl, n_latent, labels, show=True)
+        utils.print_top_words(epoch + 1, beta, id_vocab, n_topwords, result, write)
         utils.calc_perp(model, test_dl)        
-        print("epoch={}, cost={:.9f}, sum_t_c={:.2f}".format((epoch + 1), avg_cost, sum_t_c))
 
 
 if __name__ == "__main__":

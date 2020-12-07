@@ -37,10 +37,10 @@ def print_top_words(epoch, beta, id_vocab, n_top_words, result, write):
     for i in range(len(beta)):
         string_out += " ".join([id_vocab[j] for j in beta[i].argsort()[:-n_top_words - 1:-1]])
         string_out += "\n"
-        print (string_out)
         if write:
             with open(os.path.join(result, "{}.txt".format(epoch)), 'w+') as fw:
                 fw.write(string_out)
+    print (string_out)
     print ('---------------End of Topics------------------')
 
 def classification_evaluate(y_pred, y_true, labels, show=True):
