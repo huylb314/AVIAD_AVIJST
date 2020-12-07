@@ -53,10 +53,10 @@ def parse_epoch_num(filename):
 
 #get the partitions of topic folder
 for f in sorted(os.listdir(args.topic_folder), key=parse_epoch_num):
-    if not f.startswith(".") and os.path.isfile(args.topic_folder + "/" + f):
-        topic_files.append(args.topic_folder + "/" + f)
-        oc_files.append(args.oc_folder + "/" + f)
-        wc_files.append(args.wc_folder + "/" + f)
+    if not f.startswith(".") and os.path.isfile(os.path.join(args.topic_folder, f)):
+        topic_files.append(os.path.join(args.topic_folder, f))
+        oc_files.append(os.path.join(args.oc_folder, f))
+        wc_files.append(os.path.join(args.wc_folder, f))
 
 import threading
 import time

@@ -12,8 +12,7 @@ def read_seedword(seedword_path):
 def sort_values(dict):
     return list(zip(*sorted(dict.items(), key=lambda item: item[1])))[0]
 
-def print_gamma(model, vocab, seedwords):
-    gamma = model.gamma_test()
+def print_gamma(gamma, vocab, seedwords):
     np.set_printoptions(precision=3)
     np.set_printoptions(suppress=False)
     for idx_topic, seed_topic in enumerate(seedwords):

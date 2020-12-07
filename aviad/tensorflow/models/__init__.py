@@ -1,1 +1,1 @@
-from .prodlda import ProdLDA
+from .aviad import AVIAD

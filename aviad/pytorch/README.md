@@ -18,8 +18,67 @@ Applied Artificial Intelligence, 2019; 33(9), 796-816
 ### Introduction
 Autoencoding Variational Inference for Aspect Discovery (AVIAD) model, which extends the previous work of Autoencoding Variational In- ference for Topic Models (AVITM) to embed prior knowledge of seed words. This work includes enhancement of the previous AVI architecture and also modification of the loss function. Ultimately,
 
+### Requirements and Dependencies
+- Ubuntu (We test with Ubuntu = 19.10)
+- Python (We test with Python = 3.6.10 in Anaconda3 = 4.8.3)
+
+### Installation
+Download repository:
+
+    $ git clone https://github.com/huylb314/AVIAD_AVIJST.git
+
+Change directory to tensorflow aviad version
+
+    $ cd aviad/pytorch
+
+Create anaconda environment `pt_aviad`
+    
+    $ conda env create -f environment.yml
+
+### Experiments
+Run the `prodLDA` model in the `URSA` dataset, configs are defined in yaml file 
+
+    $ cd aviad/pytorch/
+    $ source acitvate pt_aviad
+    $ python run.py --config configs/1k.yaml
+
+The results will be saved in `results/ursa` with the folder name for each epoch.
+
+### Topic Coherent Evaluate
+Compute topic coherent for `URSA` results, we use package implemented by [Jey Han Lau, David Newman and Timothy Baldwin (2014)](https://github.com/jhlau/topic_interpretability.git)
+
+    $ cd topic_coherent
+    $ bash clean.sh
+    $ bash evaluate_aviad.sh -f results/ursa/1k/ -c corpus/ursa/ -n 3 -t 50
+
+```
+evaluate_aviad.sh
+-f : topwords folder
+-c : corpus folder
+-n : number of topics
+-t : number of coherent topwords
+```
+
+```
+Results:
+    oc folder: result file.
+    final_log.txt: summary scores.
+```
+
+### Preprocessing
+To preprocess the `URSA` dataset, configs are defined in yaml file 
+
+    $ cd aviad/pytorch/
+    $ source activate pt_aviad
+    $ python -c "import nltk; nltk.download('punkt')"
+    $ python -c "import nltk; nltk.download('stopwords')"
+    $ python preprocess.py --config configs/preprocessing.yaml
+
+### Contact
+- [Huy Le](mailto:13520360@gm.uit.edu.vn)
+
 ### Citation
-This code is largely based on [hyqneuron AVITM Pytorch](https://github.com/hyqneuron/pytorch-avitm). If you find the code useful in your research, please cite:
+If you find the code useful in your research, please cite:
 
     @article{doi:10.1080/08839514.2019.1630148,
          title={Towards Autoencoding Variational Inference for Aspect-Based Opinion Summary},
@@ -34,50 +93,6 @@ This code is largely based on [hyqneuron AVITM Pytorch](https://github.com/hyqne
          URL = {https://doi.org/10.1080/08839514.2019.1630148},
          eprint = {https://doi.org/10.1080/08839514.2019.1630148}
     }
-
-### Requirements and Dependencies
-- Ubuntu (We test with Ubuntu = 18.04.5 LTS)
-- Python (We test with Python = 3.6.8 in Anaconda3 = 4.1.1)
-
-### Installation
-Download repository:
-
-    $ git clone https://github.com/huylb314/AVIAD_AVIJST.git
-
-Change directory to pytorch aviad version
-
-    $ cd aviad/pytorch
-
-Create anaconda environment `avi`
-    
-    $ conda env create -f environment.yml
-
-Create anaconda environment `py27`
-    
-    $ conda env create -f environment_py27.yml
-
-### Experiments
-Run the `prodLDA` model in the `URSA` dataset:
-
-    $ cd aviad/pytorch/
-    $ source acitvate avi
-    $ python run.py
-
-The results will be saved in `results/ursa` with the folder name for each epoch.
-
-### Topic Coherent Evaluate
-Compute topic coherent for `URSA` results, we use package implemented by [Jey Han Lau, David Newman and Timothy Baldwin (2014)](https://github.com/jhlau/topic_interpretability.git)
-
-    $ cd aviad/tensorflow/topic_coherent
-    $ source acitvate py27
-    $ ./clean.sh
-    $ ./evaluate_aviad.sh
-    
-These results will be saved in `oc` folder.
-
-### Contact
-- [Tai Hoang](mailto:13520193@gm.uit.edu.vn)
-- [Huy Le](mailto:13520360@gm.uit.edu.vn)
 
 ### License
 See [MIT License](https://github.com/huylb314/AVIAD_AVIJST/blob/master/LICENSE)

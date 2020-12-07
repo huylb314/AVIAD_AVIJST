@@ -8,7 +8,7 @@ def xavier_init(fan_in, fan_out, constant=1):
     return tf.random.uniform((fan_in, fan_out), minval=low, maxval=high, dtype=tf.float32)
 
 tf.compat.v1.reset_default_graph()
-class ProdLDA(object):
+class AVIAD(object):
     """
     See "Auto-Encoding Variational Bayes" by Kingma and Welling for more details.
     """
