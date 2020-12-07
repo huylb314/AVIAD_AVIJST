@@ -13,10 +13,9 @@ from sklearn.model_selection import StratifiedShuffleSplit
 import utils
 from models import AVIAD
 from data import URSADataset, Onehotify, Onehotify, Tensorify, Floatify, Cudify
-from torchvision.transforms import Compose
-# from torchvision.datasets.data import DataLoader
-from torch.utils.data import DataLoader
 
+from torchvision.transforms import Compose
+from torch.utils.data import DataLoader
 import torch
 
 def main():
