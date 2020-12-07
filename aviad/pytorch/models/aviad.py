@@ -4,9 +4,8 @@ import torch.nn.functional as F
 import math
 
 class AVIAD(nn.Module):
-    def __init__(self, n_hidden_enc_1, n_hidden_enc_2, n_vocab, n_topic, gamma_prior, init_mult=1.0, variance=0.995, \
-                        ld=20.0, al=1.0, lr=0.001, dr=0.6):
-    # def __init__(self, num_input, en1_units, en2_units, num_topic, drop_rate, init_mult, gamma_prior):
+    def __init__(self, n_hidden_enc_1, n_hidden_enc_2, n_vocab, n_topic, gamma_prior, gammar_prior_bin, init_mult=1.0, variance=0.995, \
+                        ld=20.0, al=1.0, dr=0.6):
         super(AVIAD, self).__init__()
         self.H1, self.H2 = n_hidden_enc_1, n_hidden_enc_2
         self.V = n_vocab
@@ -17,11 +16,14 @@ class AVIAD(nn.Module):
 
         self.ld = ld # lambda
         self.al = al # alpha 
-        self.lr = lr # learning rate
         self.dr = dr # dropout
 
         # gamma prior
-        self.gamma_prior = gamma_prior
+        self.gamma_prior = gamma_prior  
+        self.gammar_prior_bin = gammar_prior_bin
+        if torch.cuda.is_available():
+            self.gamma_prior = gamma_prior.cuda()
+            self.gammar_prior_bin = gammar_prior_bin.cuda()
         
         # encoder
         self.en1_fc = nn.Linear(self.V, self.H1)
@@ -58,7 +60,7 @@ class AVIAD(nn.Module):
             component.weight.requires_grad = False
             component.weight.fill_(1.0)
         
-    def gamma(self):
+    def gamma_test(self):
         # this function have to run after self.encode
         encoder_w1 = self.en1_fc.weight
         encoder_b1 = self.en1_fc.bias
@@ -75,11 +77,11 @@ class AVIAD(nn.Module):
         
         w1 = F.softplus(encoder_w1.t() + encoder_b1)
         w2 = F.softplus(F.linear(w1, encoder_w2, encoder_b2))
-        wdr = F.dropout(w2, self.drop_rate)
+        wdr = F.dropout(w2, self.dr)
         wo_mean = F.softmax(F.linear(wdr, mean_w, mean_b), dim=-1)
-        wo_logvar = F.softmax(F.batch_norm(F.linear(wdr, logvar_w, logvar_b), logvar_running_mean, logvar_running_var), dim=-1)
+        # wo_mean = F.softmax(F.batch_norm(F.linear(wdr, mean_w, mean_b), mean_running_mean, mean_running_var), dim=-1)
         
-        return wo_mean, wo_logvar
+        return wo_mean
             
     def encode(self, x):
         # encoder
@@ -115,16 +117,13 @@ class AVIAD(nn.Module):
         recon = decoded2_ac          # reconstructed distribution over vocabulary
         return recon
     
-    def forward(self, x, compute_loss=False, avg_loss=True):
+    def forward(self, x, avg_loss=True):
         # compute posterior
         en2, posterior_mean, posterior_logvar = self.encode(x) 
         posterior_var    = posterior_logvar.exp()
         
         recon = self.decode(x, posterior_mean, posterior_var)
-        if compute_loss:
-            return recon, self.loss(x, recon, posterior_mean, posterior_logvar, posterior_var, avg_loss)
-        else:
-            return recon
+        return self.loss(x, recon, posterior_mean, posterior_logvar, posterior_var, avg_loss), self.de_fc.weight.data.cpu().numpy().T
 
     def loss(self, x, recon, posterior_mean, posterior_logvar, posterior_var, avg=True):
         # NL
@@ -142,14 +141,14 @@ class AVIAD(nn.Module):
         KLD = 0.5 * ( (var_division + diff_term + logvar_division).sum(1) - self.K)
         
         # gamma
-        n, _ = x.size()
-        gamma_mean, gamma_logvar = self.gamma()
-        gamma_prior, gammar_prior_bin = self.gamma_prior
+        N, _ = x.size()
+        gamma_mean = self.gamma_test()
+        gamma_prior, gammar_prior_bin = self.gamma_prior, self.gammar_prior_bin
         x_boolean = (x > 0).unsqueeze(dim=-1) # NxVx1
-        x_gamma_boolean = ((gammar_prior_bin.expand(n, -1, -1) == 1) & x_boolean)
+        x_gamma_boolean = ((gammar_prior_bin[:N, :, :].expand(N, -1, -1) == 1) & x_boolean)
         lambda_c = self.ld
         
-        gamma_prior = gamma_prior.expand(n, -1, -1)      
+        gamma_prior = gamma_prior.expand(N, -1, -1)      
         
         GL = lambda_c * ((gamma_prior - (x_gamma_boolean.int()*gamma_mean))**2).sum((1, 2))
         

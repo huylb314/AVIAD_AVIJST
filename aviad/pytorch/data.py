@@ -1,6 +1,10 @@
 import numpy as np
 from sklearn import metrics
 import math
+
+import torch
+from torch.utils.data import Dataset, DataLoader
+
 from typing import *
 
 # fastai utility
@@ -16,13 +20,27 @@ def compose(x, funcs, *args, **kwargs):
         x = f(x, **kwargs)
     return x
 
-class Onehotify():
+class Floatify():
+    def __call__(self, item):
+        return item.float()
+    
+class Cudify():
+    def __init__(self):
+        self.ic = torch.cuda.is_available()
+    def __call__(self, item):
+        return item.cuda() if self.ic else item
+
+class Tensorify(object):
+    def __call__(self, item):
+        return torch.from_numpy(item)
+
+class Onehotify(object):
     def __init__(self, vocab_size):
         self.vocab_size = vocab_size
     def __call__(self, item):
         return np.bincount(item, minlength=self.vocab_size)
 
-class YToOnehot():
+class YOnehotify():
     def __init__(self, num_classes):
         self.num_classes = num_classes
     def __call__(self, item):
@@ -30,26 +48,26 @@ class YToOnehot():
         categorical[0, item] = 1
         return categorical
 
-class URSADataset():
+class URSADataset(Dataset):
     def __init__(self, x, y, tfms_x, tfms_y): 
         self.x, self.y = x, y
         self.x_tfms, self.y_tfms = tfms_x, tfms_y
     def __len__(self): 
         return len(self.x)
-    def _get_transform(self, i, tfms):
-        return compose(i, tfms)
     def __getitem__(self, i): 
+        if torch.is_tensor(i):
+            i = i.tolist()
         batch_x, batch_y = self.x[i], self.y[i]
         return_x, return_y = [], []
-        if isinstance(i, slice): 
-            return_x = [self._get_transform(o, self.x_tfms) for o in batch_x]
-        if isinstance(i, slice):
-            return_y = [self._get_transform(o, self.y_tfms) for o in batch_y]
-        return np.vstack(return_x), np.vstack(return_y)
+        if self.x_tfms:
+            batch_x = self.x_tfms(batch_x)
+        if self.y_tfms:
+            batch_y = self.y_tfms(batch_y)
+        return (batch_x, batch_y)
 
-class DataLoader():
-    def __init__(self, ds, bs, drop_last=True): self.ds, self.bs, self.drop_last = ds, bs, drop_last
-    def __iter__(self):
-        length = len(self.ds) // self.bs if self.drop_last else math.ceil(len(self.ds) / self.bs)
-        for i in range(0, length, 1):
-            yield self.ds[(i*self.bs):(i*self.bs)+self.bs]
+# class DataLoader():
+#     def __init__(self, ds, bs, drop_last=True): self.ds, self.bs, self.drop_last = ds, bs, drop_last
+#     def __iter__(self):
+#         length = len(self.ds) // self.bs if self.drop_last else math.ceil(len(self.ds) / self.bs)
+#         for i in range(0, length, 1):
+#             yield self.ds[(i*self.bs):(i*self.bs)+self.bs]
