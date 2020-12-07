@@ -1,0 +1,29 @@
+dataset:
+  name: 'ursa'
+  folder-path: 'data/User Review Structure Analysis (URSA)/'
+  data-file: 'Classified_Corpus.xml'
+  train-file: 'train.txt.npy'
+  vocab-file: 'vocab.pkl'
+
+tagxml:
+  review: './/Review'
+  polarity: ['Positive', 'Negative', 'Neutral']
+  food: 'Food'
+  staff: 'Staff'
+  ambience: 'Ambience'
+
+label:
+  food: 0
+  staff: 1
+  ambience: 2
+
+limit:
+  food: -1
+  staff: -1
+  ambience: -1
+  min_freq: -1
+
+log: # log files
+  food: "food_filtered.txt" 
+  staff: "staff_filtered.txt"
+  ambience: "ambience_filtered.txt"

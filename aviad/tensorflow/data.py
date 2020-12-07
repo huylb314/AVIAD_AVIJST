@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn import metrics
 import math
+from typing import *
 
 # fastai utility
 def listify(o):

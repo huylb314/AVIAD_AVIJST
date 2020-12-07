@@ -14,11 +14,6 @@ import utils
 from models import ProdLDA
 from data import URSADataset, DataLoader, Onehotify, YToOnehot
 
-def compose(x, funcs, *args, **kwargs):
-    for f in listify(funcs): 
-        x = f(x, **kwargs)
-    return x
-
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()

@@ -1,4 +1,4 @@
-name: avi
+name: pt_aviad
 channels:
   - pytorch
   - conda-forge
