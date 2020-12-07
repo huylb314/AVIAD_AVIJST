@@ -1,0 +1,18 @@
+dataset:
+  name: 'imdb'
+  folder-path: 'data/imdb/'
+  train-file: 'train.txt.npy'
+  vocab-file: 'vocab.pkl'
+
+label:
+  negative: 0
+  positive: 1
+
+limit:
+  num-words: 10000
+  skip-top: 0
+  # maxlen: None
+  seed: 0
+  start-char: 1
+  oov-char: 2
+  index-from: 3
