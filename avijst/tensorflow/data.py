@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn import metrics
 import math
+from keras.preprocessing import sequence
+from keras.preprocessing.text import Tokenizer
 from typing import *
 
 # fastai utility
@@ -19,8 +21,15 @@ def compose(x, funcs, *args, **kwargs):
 class Onehotify():
     def __init__(self, vocab_size):
         self.vocab_size = vocab_size
+        self.tokenizer = Tokenizer(num_words=vocab_size)
     def __call__(self, item):
-        return np.bincount(item, minlength=self.vocab_size)
+        return self.tokenizer.sequences_to_matrix([item], mode='binary')
+
+class Padify():
+    def __init__(self, maxlen):
+        self.maxlen = maxlen
+    def __call__(self, item):
+        return sequence.pad_sequences([item], maxlen=self.maxlen)
 
 class YOnehotify():
     def __init__(self, num_classes):
@@ -30,7 +39,7 @@ class YOnehotify():
         categorical[0, item] = 1
         return categorical
 
-class IMDBDataset():
+class Dataset():
     def __init__(self, x, y, tfms_x, tfms_y): 
         self.x, self.y = x, y
         self.x_tfms, self.y_tfms = tfms_x, tfms_y

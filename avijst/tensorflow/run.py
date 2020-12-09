@@ -11,8 +11,8 @@ import os.path as osp
 from sklearn.model_selection import StratifiedShuffleSplit
 
 import utils
-from models import AVIAD
-from data import IMDBDataset, DataLoader, Onehotify, YOnehotify
+from models import AVIJST
+from data import Dataset, DataLoader, Onehotify, Padify, YOnehotify
 
 def main():
     # Hyper Parameters
@@ -27,12 +27,12 @@ def main():
     print(config)
     # dataset
     config_dataset = config['dataset']
-    data_path = osp.join(
-        config_dataset['folder-path'], config_dataset['data-file'])
-    vocab_path = osp.join(
-        config_dataset['folder-path'], config_dataset['vocab-file'])
+    folder_path = config_dataset['folder_path']
+    data_path = osp.join(folder_path, config_dataset['data_file'])
+    vocab_path = osp.join(folder_path, config_dataset['vocab_file'])
     labels = config_dataset['labels']
-    num_classes = config_dataset['num_classes']
+    maxlen = config_dataset['maxlen']
+    num_classes = len(labels)
 
     # model
     config_model = config['model']
@@ -46,10 +46,12 @@ def main():
     # training
     config_training = config['training']
     lr = config_training['lr']
+    cls_lr = config_training['cls_lr']
     bs = config_training['bs']
     d_step = config_training['d_step']
     epochs = config_training['epochs']
     n_topwords = config_training['n_topwords']
+    n_labeled = config_training['n_labeled']
     ratio = config_training['ratio']
     exp = config_training['exp']
     result = config_training['result']
@@ -62,39 +64,77 @@ def main():
     with open(vocab_path, 'rb') as vocabfile:
         vocab = pickle.load(vocabfile)
 
-    (train_x, train_y), (test_x, test_y) = dataset
+    (dataset_train_x, dataset_train_y), (dataset_test_x, dataset_test_y) = dataset
     id_vocab = utils.sort_values(vocab)
     vocab_size = len(vocab)
-    tfms_x = [Onehotify(vocab_size)]
+    tfms_unlabeled_x = [Onehotify(vocab_size)]
+    tfms_labeled_x = [Padify(maxlen)]
     tfms_y = [YOnehotify(num_classes)]
 
-    print (vocab_size)
-    print (train_x.shape, train_y.shape)
-    print (test_x.shape, test_y.shape)
+    network_architecture = dict(n_hidden_recog_1=n_encoder_1, # 1st layer encoder neurons
+                                n_hidden_recog_2=n_encoder_2, # 2nd layer encoder neurons
+                                n_hidden_gener_1=vocab_size, # 1st layer decoder neurons
+                                n_input=vocab_size, # MNIST data input (img shape: 28*28)
+                                n_input_pi=maxlen,
+                                n_z=n_latent,
+                                n_p=num_classes)
+
+    model = AVIJST(network_architecture, learning_rate=lr, cls_learning_rate=cls_lr, batch_size=bs)
 
     # Split data
-    sss = StratifiedShuffleSplit(n_splits=exp, test_size=ratio, random_state=0)
-    # splitted_data = sss.split(dataset_x, dataset_y)
+    sss = StratifiedShuffleSplit(n_splits=exp, test_size=n_labeled, random_state=0)
+    splitted_train = sss.split(dataset_train_x, dataset_train_y)
+    for ds_train_unlabeled_idx, ds_train_labeled_idx in splitted_train:
+        train_unlabeled_ds = Dataset(dataset_train_x[ds_train_unlabeled_idx], dataset_train_y[ds_train_unlabeled_idx], tfms_unlabeled_x, tfms_y)
+        train_labeled_ds = Dataset(dataset_train_x[ds_train_labeled_idx], dataset_train_y[ds_train_labeled_idx], tfms_labeled_x, tfms_y)
+        test_ds = Dataset(dataset_test_x, dataset_test_y, tfms_labeled_x, tfms_y)
+        
+        train_unlabeled_dl, train_labeled_dl = DataLoader(train_unlabeled_ds, bs, False), DataLoader(train_labeled_ds, bs, False)
+        test_dl = DataLoader(test_ds, bs, False)
+        
+        for epoch in range(epochs):
+            avg_cls_loss = 0.
+            avg_loss = 0.
+            avg_kl_s_loss = 0.
+            avg_kl_z_loss = 0.
+            for train_unlabeled_x,  train_unlabeled_y in train_unlabeled_dl:
+                # Labeled
+                loss_l = 0
+                train_labeled_x = None
+                for train_labeled_x, train_labeled_y in train_labeled_dl:
+                    loss_l = model.cls_fit(train_labeled_x, train_labeled_y)
+                loss_u, kl_s_loss, kl_z_loss, emb = model.partial_fit(train_unlabeled_x, train_labeled_x)
+                loss = loss_l + loss_u
 
-    train_ds, test_ds = IMDBDataset(train_x, train_y, tfms_x, tfms_y), \
-        IMDBDataset(test_x, test_y, tfms_x, tfms_y)
-    
-    train_dl, test_dl = DataLoader(train_ds, bs, False), DataLoader(test_ds, bs, False)
+            
+                avg_loss += loss_u / len(train_unlabeled_ds) * bs
+                avg_cls_loss += loss_l / len(train_unlabeled_ds) * bs
+                avg_kl_s_loss += kl_s_loss / len(train_unlabeled_ds) * bs
+                avg_kl_z_loss += kl_z_loss / len(train_unlabeled_ds) * bs
 
-    for batch_train_x,  batch_train_y in train_dl:
-        print (batch_train_x.shape, batch_train_y.shape)
+
+            print("Epoch:", '%04d' % (epoch+1), \
+                    "cls_cost=", "{:.9f}".format(avg_cls_loss), \
+                    "cost=", "{:.9f}".format(avg_loss), \
+                    "kl_s=", "{:.9f}".format(avg_kl_s_loss), \
+                    "kl_z=", "{:.9f}".format(avg_kl_z_loss), \
+                #   "accu=", "{:.1f}".format(100. * accu), \
+                    )
+
+            pi_pred = []
+            pi_label = []
+            for test_x,  test_y in test_dl:
+                pi_out = model.senti_prop(test_x)
+                pi_out = np.argmax(pi_out, axis=-1)
+                test_y = np.argmax(test_y, axis=-1)
+                pi_pred.extend(pi_out)
+                pi_label.extend(test_y)
+            utils.classification_evaluate(pi_pred, pi_label, labels=['negative', 'positive'])
 
     exit()
 
-    model = AVIAD(n_encoder_1, n_encoder_2, 
-                    vocab_size, n_latent, 
-                    gamma_prior=gamma_prior, ld=ld, al=al, lr=lr, dr=dr)
-
-    for ds_train_idx, ds_test_idx in splitted_data:
-        train_ds, test_ds = URSADataset(dataset_x[ds_train_idx], dataset_y[ds_train_idx], tfms_x, tfms_y), \
-            URSADataset(dataset_x[ds_test_idx], dataset_y[ds_test_idx], tfms_x, tfms_y)
-        
-        train_dl, test_dl = DataLoader(train_ds, bs, False), DataLoader(test_ds, bs, False)
+    for batch_train_x,  batch_train_y in train_dl:
+        print (batch_train_x.shape, batch_train_y.shape)
         beta = None
 
         for epoch in range(epochs):

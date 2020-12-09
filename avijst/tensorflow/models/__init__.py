@@ -1,1 +1,1 @@
-from .aviad import AVIAD
+from .avijst import AVIJST

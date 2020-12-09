@@ -16,7 +16,7 @@ def create_vocab(idx_from=3):
     vocab["<FCK>"] = 3
     
     id_vocab = {v:k for k,v in vocab.items()}
-    return id_vocab, vocab 
+    return id_vocab, vocab
 
 def main():
     # Hyper Parameters
@@ -34,10 +34,11 @@ def main():
     config_dataset = config['dataset']
     dataset_name = config_dataset['name']
     dataset_folder_path = config_dataset['folder-path']
+    dataset_dest_path = config_dataset['dest-path']
     dataset_train_file = config_dataset['train-file']
     dataset_vocab_file = config_dataset['vocab-file']
-    dataset_train_path = osp.join(dataset_folder_path, dataset_train_file)
-    dataset_vocab_path = osp.join(dataset_folder_path, dataset_vocab_file)
+    dataset_train_path = osp.join(dataset_dest_path, dataset_train_file)
+    dataset_vocab_path = osp.join(dataset_dest_path, dataset_vocab_file)
 
     # label
     config_label = config['label']
@@ -52,6 +53,10 @@ def main():
     limit_start_char = config_limit['start-char']
     limit_oov_char = config_limit['oov-char']
     limit_index_from = config_limit['index-from']
+    limit_vocab_size = config_limit['vocab-size']
+
+    # create result folders
+    os.makedirs(dataset_dest_path, exist_ok=True)
 
     (x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=limit_num_words, skip_top=limit_skip_top, \
                                                           seed=limit_seed, start_char=limit_start_char, \
@@ -60,6 +65,10 @@ def main():
     print (x_test.shape, y_test.shape)
     onehot_data = ((x_train, y_train), (x_test, y_test))
     id_vocab, vocab = create_vocab(idx_from=3)
+    vocab = vocab.items()
+    vocab = sorted(vocab, key=lambda item: item[1])
+    vocab = dict(vocab[:limit_vocab_size])
+    print (vocab)
 
     # Save Into File
     np.save (dataset_train_path, onehot_data)
