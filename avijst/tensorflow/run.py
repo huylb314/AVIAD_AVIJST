@@ -16,13 +16,15 @@ from data import Dataset, DataLoader, Onehotify, Padify, YOnehotify
 
 def main():
     # Hyper Parameters
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default="configs/1k.yaml",
-                        help="Which configuration to use. See into 'config' folder")
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--config', type=str, default="configs/1k.yaml",
+    #                     help="Which configuration to use. See into 'config' folder")
 
-    opt = parser.parse_args()
+    # opt = parser.parse_args()
 
-    with open(opt.config, 'r') as ymlfile:
+    config_path = "configs/5k/imdb.yaml"
+    # with open(opt.config, 'r') as ymlfile:
+    with open(config_path, 'r') as ymlfile:
         config = yaml.load(ymlfile, Loader=yaml.FullLoader)
     print(config)
     # dataset
@@ -79,33 +81,44 @@ def main():
                                 n_z=n_latent,
                                 n_p=num_classes)
 
-    model = AVIJST(network_architecture, learning_rate=lr, cls_learning_rate=cls_lr, batch_size=bs)
+    # model = AVIJST(network_architecture, learning_rate=lr, cls_learning_rate=cls_lr, batch_size=bs)
+
+    model = AVIJST(network_architecture,
+                              learning_rate=lr,
+                              cls_learning_rate=cls_lr,
+                              batch_size=bs)
 
     # Split data
     sss = StratifiedShuffleSplit(n_splits=exp, test_size=n_labeled, random_state=0)
     splitted_train = sss.split(dataset_train_x, dataset_train_y)
-    for ds_train_unlabeled_idx, ds_train_labeled_idx in splitted_train:
-        train_unlabeled_ds = Dataset(dataset_train_x[ds_train_unlabeled_idx], dataset_train_y[ds_train_unlabeled_idx], tfms_unlabeled_x, tfms_y)
+    for _, ds_train_labeled_idx in splitted_train:
+        train_unlabeled_ds = Dataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
+                                     np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
+                                     tfms_unlabeled_x, tfms_y)
+        train_unlabeled_pi_ds = Dataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
+                                        np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
+                                        tfms_labeled_x, tfms_y)
         train_labeled_ds = Dataset(dataset_train_x[ds_train_labeled_idx], dataset_train_y[ds_train_labeled_idx], tfms_labeled_x, tfms_y)
         test_ds = Dataset(dataset_test_x, dataset_test_y, tfms_labeled_x, tfms_y)
         
-        train_unlabeled_dl, train_labeled_dl = DataLoader(train_unlabeled_ds, bs, False), DataLoader(train_labeled_ds, bs, False)
+        train_unlabeled_dl = DataLoader(train_unlabeled_ds, bs, False)
+        train_unlabeled_pi_dl = DataLoader(train_unlabeled_pi_ds, bs, False)
+        train_labeled_dl = DataLoader(train_labeled_ds, bs, False)
         test_dl = DataLoader(test_ds, bs, False)
-        
+
         for epoch in range(epochs):
             avg_cls_loss = 0.
             avg_loss = 0.
             avg_kl_s_loss = 0.
             avg_kl_z_loss = 0.
-            for train_unlabeled_x,  train_unlabeled_y in train_unlabeled_dl:
+            for idx, ((train_unlabeled_x, _), (train_unlabeled_pi_x, _)) in enumerate(zip(train_unlabeled_dl, train_unlabeled_pi_dl)):
                 # Labeled
                 loss_l = 0
                 train_labeled_x = None
                 for train_labeled_x, train_labeled_y in train_labeled_dl:
                     loss_l = model.cls_fit(train_labeled_x, train_labeled_y)
-                loss_u, kl_s_loss, kl_z_loss, emb = model.partial_fit(train_unlabeled_x, train_labeled_x)
+                loss_u, kl_s_loss, kl_z_loss, emb = model.partial_fit(train_unlabeled_x, train_unlabeled_pi_x)
                 loss = loss_l + loss_u
-
             
                 avg_loss += loss_u / len(train_unlabeled_ds) * bs
                 avg_cls_loss += loss_l / len(train_unlabeled_ds) * bs
@@ -118,7 +131,6 @@ def main():
                     "cost=", "{:.9f}".format(avg_loss), \
                     "kl_s=", "{:.9f}".format(avg_kl_s_loss), \
                     "kl_z=", "{:.9f}".format(avg_kl_z_loss), \
-                #   "accu=", "{:.1f}".format(100. * accu), \
                     )
 
             pi_pred = []

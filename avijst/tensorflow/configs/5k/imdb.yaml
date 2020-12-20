@@ -1,6 +1,6 @@
 dataset:
   name: 'imdb'
-  folder_path: 'data/imdb/5k'
+  folder_path: 'data/imdb/10k'
   data_file: 'train.txt.npy'
   vocab_file: 'vocab.pkl'
   labels: ['negative', 'positive']
@@ -22,7 +22,7 @@ training:
   d_step: 50
   epochs: 300 # 20
   n_topwords: 50
-  n_labeled: 250
+  n_labeled: 1000
   ratio: 0.2
   exp: 1
   result: 'results/imdb'

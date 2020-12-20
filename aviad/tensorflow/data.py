@@ -22,7 +22,7 @@ class Onehotify():
     def __call__(self, item):
         return np.bincount(item, minlength=self.vocab_size)
 
-class YToOnehot():
+class YOnehotify():
     def __init__(self, num_classes):
         self.num_classes = num_classes
     def __call__(self, item):
