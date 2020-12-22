@@ -60,7 +60,7 @@ def classification_evaluate(y_pred, y_true, labels, show=True):
 
     return (accuracy, precision, recall, support, f1_score)
 
-def classification_evaluate_dl(model, dl, n_latent, labels, show=True):
+def classification_evaluate_dl(fn, dl, n_latent, labels, show=True):
     avg_accuracy = 0.
     avg_precision = [0.] * n_latent
     avg_recall = [0.] * n_latent
@@ -68,11 +68,11 @@ def classification_evaluate_dl(model, dl, n_latent, labels, show=True):
     avg_f1_score = [0.] * n_latent
     for x_,  y_ in dl:
         # Compute accuracy
-        theta_ = model.topic_prop(x_)
-        theta_ = np.argmax(theta_, axis=1)
+        temp_ = fn(x_)
+        temp_ = np.argmax(temp_, axis=1)
 
         accuracy, precision, recall, support, f1_score = \
-            classification_evaluate(theta_, y_, labels, show=False)
+            classification_evaluate(temp_, y_, labels, show=False)
         avg_accuracy += accuracy / len(dl.ds) * dl.bs
         for i in range(n_latent):
             avg_precision[i] += precision[i] / len(dl.ds) * dl.bs

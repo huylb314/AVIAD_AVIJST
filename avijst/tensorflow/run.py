@@ -59,15 +59,13 @@ def batch_sequences_to_matrix(tokenizer, X):
 
 def main():
     # Hyper Parameters
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--config', type=str, default="configs/1k.yaml",
-    #                     help="Which configuration to use. See into 'config' folder")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default="configs/1k.yaml",
+                        help="Which configuration to use. See into 'config' folder")
 
-    # opt = parser.parse_args()
+    opt = parser.parse_args()
 
-    config_path = "configs/5k/imdb.yaml"
-    # with open(opt.config, 'r') as ymlfile:
-    with open(config_path, 'r') as ymlfile:
+    with open(opt.config, 'r') as ymlfile:
         config = yaml.load(ymlfile, Loader=yaml.FullLoader)
     print(config)
     # dataset
@@ -84,6 +82,7 @@ def main():
     n_encoder_1 = config_model['n_encoder_1']
     n_encoder_2 = config_model['n_encoder_2']
     n_latent = config_model['n_latent']
+    n_sentiment = config_model['n_sentiment']
     dr = config_model['dropout']
     ld = config_model['lambda']
     al = config_model['alpha']
@@ -124,25 +123,18 @@ def main():
                                 n_z=n_latent,
                                 n_p=num_classes)
 
-    # model = AVIJST(network_architecture, learning_rate=lr, cls_learning_rate=cls_lr, batch_size=bs)
-
     model = AVIJST(network_architecture,
                               learning_rate=lr,
                               cls_learning_rate=cls_lr,
                               batch_size=bs)
 
-    X_unlabeled = np.concatenate((dataset_train_x, dataset_test_x), axis=0)
-    X_unlabeled_pi = np.concatenate((dataset_train_x, dataset_test_x), axis=0)
+    # Split data
     sss = StratifiedShuffleSplit(n_splits=exp, test_size=n_labeled, random_state=0)
     splitted_train = sss.split(dataset_train_x, dataset_train_y)
-    sample_size = 500
-    tokenizer = Tokenizer(num_words=vocab_size)
-    n_samples_tr = dataset_train_x.shape[0] + dataset_test_x.shape[0]
-    batch_size = bs
     for _, ds_train_labeled_idx in splitted_train:
         train_unlabeled_ds = Dataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
-                                        np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
-                                        tfms_unlabeled_x, tfms_y)
+                                     np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
+                                     tfms_unlabeled_x, tfms_y)
         train_unlabeled_pi_ds = Dataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
                                         np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
                                         tfms_labeled_x, tfms_y)
@@ -153,94 +145,46 @@ def main():
         train_unlabeled_pi_dl = DataLoader(train_unlabeled_pi_ds, bs, False)
         train_labeled_dl = DataLoader(train_labeled_ds, bs, False)
         test_dl = DataLoader(test_ds, bs, False)
-        
-        X_labeled_pi = dataset_train_x[ds_train_labeled_idx]
-        X_labeled = X_labeled_pi
-        y_labeled = dataset_train_y[ds_train_labeled_idx]
 
-        folder="topwords_"+str(sample_size)
-        os.makedirs(folder, exist_ok=True)
         start = time.time()
-        history = []
-        print("Label: ", X_labeled.shape, " Unlabeled: ", X_unlabeled.shape)
-        
-        # Init VAE
-        tf.reset_default_graph()
-        vae = model
-        
-        def create_minibatch(data_size):
-            rng = np.random.RandomState(10)
-
-            while True:
-                # Return random data samples of a size 'minibatch_size' at each iteration
-                ixs = rng.randint(data_size, size=batch_size)
-                yield ixs
-                
-        unlabel_minibatches = create_minibatch(n_samples_tr)
-        label_minibatches = create_minibatch(X_labeled.shape[0])
+        print ("train_labeled_ds: ", len(train_labeled_ds))
+        print ("train_unlabeled_pi_ds: ", len(train_unlabeled_pi_ds))
+        print ("train_unlabeled_ds: ", len(train_unlabeled_ds))
         
         train_labeled_iter = iter(train_labeled_dl)
         for epoch in range(epochs):
-            batches = len(X_unlabeled) // batch_size
-            #with tnrange(batches, leave=False) as pbar:
-            
             avg_loss = 0.
             avg_kl_s_loss = 0.
             avg_kl_z_loss = 0.
             avg_cls_loss = 0.
 
-            
-            # for i in range(batches):
             for idx, ((train_unlabeled_x, _), (train_unlabeled_pi_x, _)) in enumerate(zip(train_unlabeled_dl, train_unlabeled_pi_dl)):
                 # Labeled
-                loss_l = 0
-                if len(X_labeled) > 0:
+                if len(train_labeled_ds) > 0:
+                    train_labeled_x, train_labeled_y = None, None
                     try:
                         train_labeled_x, train_labeled_y = next(train_labeled_iter)
-                        loss_l = vae.cls_fit(train_labeled_x, train_labeled_y)
                     except:
                         train_labeled_iter = iter(train_labeled_dl)
                         train_labeled_x, train_labeled_y = next(train_labeled_iter)
-                        loss_l = vae.cls_fit(train_labeled_x, train_labeled_y)
+                    loss_l = model.cls_fit(train_labeled_x, train_labeled_y)
+                    avg_cls_loss += loss_l / len(train_unlabeled_ds) * bs
                 
                 # Unlabeled
-                index_range = unlabel_minibatches.__next__()
-                loss_u, kl_s_loss, kl_z_loss, emb = vae.partial_fit(train_unlabeled_x, train_unlabeled_pi_x)
-                avg_cls_loss += loss_l / n_samples_tr * batch_size
-                avg_loss += loss_u / n_samples_tr * batch_size
-                avg_kl_s_loss += kl_s_loss / n_samples_tr * batch_size
-                avg_kl_z_loss += kl_z_loss / n_samples_tr * batch_size
-
-            # avg_cls_loss = 0.
-            # for train_labeled_x, train_labeled_y in train_labeled_dl:
-            #     loss_l = vae.cls_fit(train_labeled_x, train_labeled_y)
-            #     avg_cls_loss += loss_l / len(train_labeled_ds) * batch_size
+                loss_u, kl_s_loss, kl_z_loss, emb = model.partial_fit(train_unlabeled_x, train_unlabeled_pi_x)
+                avg_loss += loss_u / len(train_unlabeled_ds) * bs
+                avg_kl_s_loss += kl_s_loss / len(train_unlabeled_ds) * bs
+                avg_kl_z_loss += kl_z_loss / len(train_unlabeled_ds) * bs
 
             # Display logs per epoch step
             if epoch % 2 == 0:
-                y_pred = []
-                batches = len(dataset_test_x) // batch_size
-                y_data = []
-                for i in range(batches):
-                    idx_from = i * batch_size
-                    idx_to = (i+1) * batch_size
-                    temp_X_labeled_pi = sequence.pad_sequences(dataset_test_x[idx_from:idx_to], maxlen=maxlen)
-                    y_data.extend(dataset_test_y[idx_from:idx_to])
-                    y_pred.extend(np.argmax(vae.senti_prop(temp_X_labeled_pi), axis=-1))
-                    # print (y_pred[idx_from:idx_to])
-                utils.classification_evaluate(y_pred, y_data, labels=['negative', 'positive'])
+                utils.classification_evaluate_dl(lambda x: model.senti_prop(x), test_dl, n_sentiment, labels=['negative', 'positive'])
             print("Epoch:", '%04d' % (epoch+1), \
                 "cls_cost=", "{:.9f}".format(avg_cls_loss), \
                 "cost=", "{:.9f}".format(avg_loss), \
                 "kl_s=", "{:.9f}".format(avg_kl_s_loss), \
                 "kl_z=", "{:.9f}".format(avg_kl_z_loss), \
-                # "accu=", "{:.1f}".format(100. * accu), \
                 )
-            
-            # if epoch % 10 == 0:
-            #     file = open(folder+"/epoch_"+str(epoch)+".txt","w") 
-            #     printTopWord(vae, file)
-            #     file.close()
     
         done = time.time()
         elapsed = done - start
@@ -281,7 +225,7 @@ def main():
                 loss = loss_l + loss_u
             
                 avg_loss += loss_u / len(train_unlabeled_ds) * bs
-                avg_cls_loss += loss_l / len(train_unlabeled_ds) * bs
+                avg_cls_loss += loss_l / len(train_unlabeled_pi_ds) * bs
                 avg_kl_s_loss += kl_s_loss / len(train_unlabeled_ds) * bs
                 avg_kl_z_loss += kl_z_loss / len(train_unlabeled_ds) * bs
 

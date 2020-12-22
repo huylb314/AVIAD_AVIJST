@@ -11,6 +11,7 @@ model:
   n_encoder_1: 500
   n_encoder_2: 500
   n_latent: 50
+  n_sentiment: 2
   dropout: 0.6
   lambda: 20.0
   alpha: 1.0
