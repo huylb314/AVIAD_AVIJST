@@ -12,7 +12,8 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import utils
 from models import AVIJST
-from data import Dataset, DataLoader, Onehotify, Padify, YOnehotify
+from data import IMDBDataset, Onehotify, YOnehotify, Tensorify, Floatify, Cudify
+from torchvision.transforms import Compose
 
 def main():
     # Hyper Parameters
@@ -33,7 +34,7 @@ def main():
     vocab_path = osp.join(folder_path, config_dataset['vocab_file'])
     labels = config_dataset['labels']
     maxlen = config_dataset['maxlen']
-    num_classes = len(labels)
+    n_classes = len(labels)
 
     # model
     config_model = config['model']
@@ -69,40 +70,41 @@ def main():
     (dataset_train_x, dataset_train_y), (dataset_test_x, dataset_test_y) = dataset
     id_vocab = utils.sort_values(vocab)
     vocab_size = len(vocab)
-    tfms_unlabeled_x = [Onehotify(vocab_size)]
-    tfms_labeled_x = [Padify(maxlen)]
-    tfms_y = [YOnehotify(num_classes)]
 
-    network_architecture = dict(n_hidden_recog_1=n_encoder_1, # 1st layer encoder neurons
-                                n_hidden_recog_2=n_encoder_2, # 2nd layer encoder neurons
-                                n_hidden_gener_1=vocab_size, # 1st layer decoder neurons
-                                n_input=vocab_size, # MNIST data input (img shape: 28*28)
-                                n_input_pi=maxlen,
-                                n_z=n_latent,
-                                n_p=num_classes)
+    tfms_xr = [Padify(maxlen), Numpyify(), Tensorify(), Longify(), CheckAndCudify()]
+    tfms_lenxr = [Lengthen(), Numpyify(), Tensorify(), Longify(),  CheckAndCudify()]
 
-    model = AVIJST(network_architecture,
-                              learning_rate=lr,
-                              cls_learning_rate=cls_lr,
-                              batch_size=bs)
+    tfms_x = [Numpyify(), Onehotify(vocab_size=vocab_size), Tensorify(), Floatify(), CheckAndCudify()]
+    tfms_y = [YToOnehot(num_classes=num_classes), Numpyify(), Tensorify(), Floatify(), CheckAndCudify()]
+
+    model = AVIJST(vocab_size, n_encoder_1, n_encoder_2, \
+                n_latent, n_classes, dr, \
+                init_mult=1.0, num_layers=2, bidirectional=True, \
+                pad_idx=id_vocab['<PAD>'])
 
     # Split data
     sss = StratifiedShuffleSplit(n_splits=exp, test_size=n_labeled, random_state=0)
     splitted_train = sss.split(dataset_train_x, dataset_train_y)
     for _, ds_train_labeled_idx in splitted_train:
-        train_unlabeled_ds = Dataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
-                                     np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
-                                     tfms_unlabeled_x, tfms_y)
-        train_unlabeled_pi_ds = Dataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
-                                        np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
-                                        tfms_labeled_x, tfms_y)
-        train_labeled_ds = Dataset(dataset_train_x[ds_train_labeled_idx], dataset_train_y[ds_train_labeled_idx], tfms_labeled_x, tfms_y)
-        test_ds = Dataset(dataset_test_x, dataset_test_y, tfms_labeled_x, tfms_y)
+        train_unlabeled_ds = IMDBDataset(np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
+                                         np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
+                                         np.concatenate((dataset_train_x, dataset_test_x), axis=0),\
+                                         np.concatenate((dataset_train_y, dataset_test_y), axis=0),\
+                                         tfms_xr=tfms_xr, tfms_lenxr=tfms_lenxr, tfms_x=tfms_x, tfms_y=tfms_y)
+        train_labeled_ds = IMDBDataset(dataset_train_x[ds_train_labeled_idx], dataset_train_y[ds_train_labeled_idx], \
+                                       dataset_train_x[ds_train_labeled_idx], dataset_train_y[ds_train_labeled_idx], \
+                                       tfms_xr=tfms_xr, tfms_lenxr=tfms_lenxr, tfms_x=tfms_x, tfms_y=tfms_y)
+        test_ds = IMDBDataset(dataset_test_x, dataset_test_y, dataset_test_x, dataset_test_y, \
+                              tfms_xr=tfms_xr, tfms_lenxr=tfms_lenxr, tfms_x=tfms_x, tfms_y=tfms_y)
         
-        train_unlabeled_dl = DataLoader(train_unlabeled_ds, bs, False)
-        train_unlabeled_pi_dl = DataLoader(train_unlabeled_pi_ds, bs, False)
-        train_labeled_dl = DataLoader(train_labeled_ds, bs, False)
-        test_dl = DataLoader(test_ds, bs, False)
+        train_unlabeled_samp = Sampler(train_unlabeled_ds, bs, shuffle=False)
+        train_labeled_samp = Sampler(train_labeled_ds, bs, shuffle=False)
+        test_samp = Sampler(test_ds, bs, shuffle=False)
+
+        train_unlabeled_dl = DataLoader(train_unlabeled_ds, bs, drop_last=False)
+        train_unlabeled_pi_dl = DataLoader(train_unlabeled_pi_ds, bs, drop_last=False)
+        train_labeled_dl = DataLoader(train_labeled_ds, bs, drop_last=False)
+        test_dl = DataLoader(test_ds, bs, drop_last=False)
 
         start = time.time()
         print ("train_labeled_ds: ", len(train_labeled_ds))
@@ -111,6 +113,7 @@ def main():
         
         train_labeled_iter = iter(train_labeled_dl)
         for epoch in range(epochs):
+            model.train()
             avg_loss = 0.
             avg_kl_s_loss = 0.
             avg_kl_z_loss = 0.
@@ -127,7 +130,12 @@ def main():
                     except:
                         train_labeled_iter = iter(train_labeled_dl)
                         train_labeled_x, train_labeled_y = next(train_labeled_iter)
-                    loss_l = model.cls_fit(train_labeled_x, train_labeled_y)
+                    
+                    recon, theta_encoded, pi_encoded, \
+                        theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
+                            pi_posterior_mean, pi_posterior_logvar, pi_posterior_var = \
+                                model(x_semi, xr_semi, xrlen_semi, compute_loss=False)
+                        loss_l = criterion(pi_posterior_mean, y_semi)
                     avg_cls_loss += loss_l / len(train_unlabeled_ds) * bs
                 
                 # Unlabeled

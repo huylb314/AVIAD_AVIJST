@@ -1,297 +1,240 @@
-import numpy as np
-import tensorflow as tf
-from keras import backend as K
-from tensorflow.keras.layers import Dense, Dropout, Activation, BatchNormalization
-from tensorflow.keras.layers import Embedding
-from tensorflow.keras.layers import Conv1D, GlobalMaxPooling1D
-from tensorflow.contrib.keras.api.keras.initializers import Constant
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-def xavier_init(fan_in, fan_out, constant=1):
-    low = -constant*tf.sqrt(6.0/(fan_in + fan_out))
-    high = constant*tf.sqrt(6.0/(fan_in + fan_out))
-    return tf.random.uniform((fan_in, fan_out), minval=low, maxval=high, dtype=tf.float32)
-
-tf.compat.v1.reset_default_graph()
-class AVIJST(object):
-    """
-    See "Auto-Encoding Variational Bayes" by Kingma and Welling for more details.
-    """
-    def __init__(self, network_architecture, transfer_fct=tf.nn.softplus,
-                 learning_rate=0.001, cls_learning_rate=0.005, batch_size=100, cls_model=None, save_file=None):
-        self.network_architecture = network_architecture
-        self.transfer_fct = transfer_fct
-        self.learning_rate = learning_rate
-        self.cls_learning_rate = cls_learning_rate
-        self.batch_size = batch_size
-        print('Learning Rate: {0}, Classification Learning Rate: {1}'.format(self.learning_rate, self.cls_learning_rate))
-
-        # tf Graph input
-        self.x = tf.compat.v1.placeholder(tf.float32, [None, network_architecture["n_input"]])
-        self.x_pi = tf.compat.v1.placeholder(tf.float32, [None, network_architecture["n_input_pi"]])
-        self.y = tf.compat.v1.placeholder(tf.float32, [None, network_architecture["n_p"]])
-        self.keep_prob = tf.compat.v1.placeholder(tf.float32)
-
-        # n_z: number of aspect
-        # n_p: number of sentiment
-        self.h_dim = int(network_architecture["n_z"])
-        self.pol_dim = int(network_architecture["n_p"])
-        self.mix_dim = self.h_dim*self.pol_dim
+class AVIJST(nn.Module):
+    def __init__(self, num_input, en1_units, en2_units, \
+                 num_topic, num_sentiment, drop_rate, \
+                 init_mult, num_layers, bidirectional, pad_idx):
+        super(ProdLDA, self).__init__()
+        self.num_input, self.en1_units, self.en2_units, \
+        self.num_topic, self.num_sentiment, self.drop_rate, \
+        self.init_mult, self.num_layers, self.bidirectional, self.pad_idx = \
+                num_input, en1_units, en2_units, \
+                num_topic, num_sentiment, drop_rate, \
+                init_mult, num_layers, bidirectional, pad_idx
+        self.num_mix = self.num_topic * self.num_sentiment
+        self.batch_first, self.enforce_sorted = True, False
+                
+        ## PI
+        # encoder: pi
+        # self.pi_en1_fc = nn.Linear(self.num_input, self.en1_units)
+        # self.pi_en1_ac = nn.Softplus()
+        # self.pi_en2_fc     = nn.Linear(self.en1_units, self.en2_units)
+        # self.pi_en2_ac = nn.Softplus()
+        # self.pi_en2_dr   = nn.Dropout(self.drop_rate)
+        # sentiment classification: pi 
+        self.pi_emb = nn.Embedding(self.num_input, self.en1_units, padding_idx=self.pad_idx)
+        self.pi_rnn = nn.LSTM(self.en1_units, self.en2_units, num_layers=self.num_layers, \
+                              bidirectional=self.bidirectional, batch_first=self.batch_first)
+        self.pi_fc = nn.Linear(self.en2_units * 2, self.en2_units)
+        self.pi_dr = nn.Dropout(self.drop_rate)
+        self.pi_ac = nn.ReLU()
+        # mean, logvar: pi
+        self.pi_mean_fc = nn.Linear(self.en2_units, self.num_sentiment)
+        self.pi_mean_bn = nn.BatchNorm1d(self.num_sentiment)
+        self.pi_logvar_fc = nn.Linear(self.en2_units, self.num_sentiment)
+        self.pi_logvar_bn = nn.BatchNorm1d(self.num_sentiment)
+        # decoder: pi
+        self.pi_de_ac = nn.Softmax(dim=-1)
+        self.pi_de_fc = nn.Linear(self.num_sentiment, self.num_input)
+        # prior mean and variance: pi (1 x S) S_sentiments
+        self.pi_prior_mean   = torch.Tensor(1, self.num_sentiment).fill_(0)
+        self.pi_prior_var    = torch.Tensor(1, self.num_sentiment).fill_(0.995)
+        self.pi_prior_mean   = nn.Parameter(self.pi_prior_mean, requires_grad=False)
+        self.pi_prior_var    = nn.Parameter(self.pi_prior_var, requires_grad=False)
+        self.pi_prior_logvar = nn.Parameter(self.pi_prior_var.log(), requires_grad=False)
         
-        # alpha is SxK matrix: S distrution over K topic
+        ## THETA
+        # encoder: theta
+        self.theta_en1_fc = nn.Linear(self.num_input, self.en1_units)
+        self.theta_en1_ac = nn.Softplus()
+        self.theta_en2_fc     = nn.Linear(self.en1_units, self.en2_units)
+        self.theta_en2_ac = nn.Softplus()
+        self.theta_en2_dr   = nn.Dropout(self.drop_rate)
+        # mean, logvar: theta
+        self.theta_mean_fc = nn.Linear(self.en2_units, self.num_mix)
+        self.theta_mean_bn = nn.BatchNorm1d(self.num_mix)
+        self.theta_logvar_fc = nn.Linear(self.en2_units, self.num_mix)
+        self.theta_logvar_bn = nn.BatchNorm1d(self.num_mix)
+        # decoder: theta
+        self.theta_de_ac = nn.Softmax(dim=-1)
+        # prior mean and variance: theta (S x K) (S_sentiments) distribution over (K_topics)
+        self.theta_prior_mean = torch.Tensor(self.num_sentiment, self.num_topic).fill_(0)
+        self.theta_prior_var    = torch.Tensor(self.num_sentiment, self.num_topic).fill_(0.995)
+        self.theta_prior_mean   = nn.Parameter(self.theta_prior_mean, requires_grad=False)
+        self.theta_prior_var    = nn.Parameter(self.theta_prior_var, requires_grad=False)
+        self.theta_prior_logvar = nn.Parameter(self.theta_prior_var.log(), requires_grad=False)
         
-        self.a = 1*np.ones((self.pol_dim , self.h_dim)).astype(np.float32)
-        self.mu2 = tf.constant((np.log(self.a).T-np.mean(np.log(self.a),1)).T)
-        self.var2 = tf.constant(  ( ( (1.0/self.a)*( 1 - (2.0/self.h_dim) ) ).T +
-                                ( 1.0/(self.h_dim*self.h_dim) )*np.sum(1.0/self.a,1) ).T  )
-        #"""
-        self.g = 1*np.ones((1 , self.pol_dim)).astype(np.float32)
-        self.pi_mu2 = tf.constant((np.log(self.g).T-np.mean(np.log(self.g),1)).T)
-        self.pi_var2 = tf.constant(  ( ( (1.0/self.g)*( 1 - (2.0/self.pol_dim) ) ).T +
-                                ( 1.0/(self.pol_dim*self.pol_dim) )*np.sum(1.0/self.g,1) ).T  )
-        #"""
-        """
-        self.mu2 = tf.constant(np.zeros((self.pol_dim , self.h_dim)).astype(np.float32))
-        self.var2 = tf.constant(np.ones((self.pol_dim , self.h_dim)).astype(np.float32))
+        # mix theta pi
+        self.theta_pi_de_fc = nn.Linear(self.num_mix, self.num_input)
+        self.theta_pi_de_bn = nn.BatchNorm1d(self.num_input)
+        self.theta_pi_de_ac = nn.Softmax(dim=-1)
         
-        self.pi_mu2 = tf.constant(np.zeros((1 , self.pol_dim)).astype(np.float32))
-        self.pi_var2 = tf.constant(np.ones((1 , self.pol_dim)).astype(np.float32))
-        """
+        # initialize decoder weight
+        if init_mult != 0:
+            #std = 1. / math.sqrt( init_mult * (num_topic + num_input))
+            self.pi_de_fc.weight.data.uniform_(0, init_mult)
+            self.theta_pi_de_fc.weight.data.uniform_(0, init_mult)
+        # remove BN's scale parameters
+        for component in [self.pi_mean_bn, self.pi_logvar_bn, \
+                          self.theta_mean_bn, self.theta_logvar_bn, self.theta_pi_de_bn]:
+            component.weight.requires_grad = False
+            component.weight.fill_(1.0)
+            
+    def encode(self, input_, input_r_, input_len_):
+        # extract bs
+        bs, *_ = input_.size()
+        
+        ## THETA
+        # encoder: theta
+        theta_encoded1 = self.theta_en1_fc(input_)
+        theta_encoded1_ac = self.theta_en1_ac(theta_encoded1)
+        theta_encoded2 = self.theta_en2_fc(theta_encoded1_ac)
+        theta_encoded2_ac = self.theta_en2_ac(theta_encoded2)
+        theta_encoded2_dr = self.theta_en2_dr(theta_encoded2_ac)
+        theta_encoded = theta_encoded2_dr
+        # hidden => mean, logvar: theta
+        theta_mean = self.theta_mean_fc(theta_encoded)
+        theta_mean_bn = self.theta_mean_bn(theta_mean)
+        theta_mean_reshaped = theta_mean_bn.view(bs, self.num_sentiment, self.num_topic)
+        theta_logvar = self.theta_logvar_fc(theta_encoded)
+        theta_logvar_bn = self.theta_logvar_bn(theta_logvar)
+        theta_logvar_reshaped = theta_logvar_bn.view(bs, self.num_sentiment, self.num_topic)
+        # posterior: theta
+        theta_posterior_mean = theta_mean_reshaped # N x S x K
+        theta_posterior_logvar = theta_logvar_reshaped # N x S x K
+        
+        ## PI
+        # encoder: pi
+        # pi_encoded1 = self.pi_en1_fc(input_)
+        # pi_encoded1_ac = self.pi_en1_ac(pi_encoded1)
+        # pi_encoded2 = self.pi_en2_fc(pi_encoded1_ac)
+        # pi_encoded2_ac = self.pi_en2_ac(pi_encoded2_ac)
+        # pi_encoded2_dr = self.pi_en2_dr(pi_encoded2_dr)
+        # pi_encoded = pi_encoded2_dr
+        # encoder: pi_cls 
+        pi_embedded = self.pi_dr(self.pi_emb(input_r_))
+        # pack sequence
+        pi_packed_embedded = nn.utils.rnn.pack_padded_sequence(pi_embedded, input_len_, batch_first=self.batch_first, enforce_sorted=self.enforce_sorted)
+        #embedded = [bs, sent_len, emb_dim]
+        pi_packed_output, (pi_hidden_rnn, pi_cell_rnn) = self.pi_rnn(pi_packed_embedded)
+        #unpack sequence
+        pi_output, pi_output_len_ = nn.utils.rnn.pad_packed_sequence(pi_packed_output, batch_first=self.batch_first)
+        #output = [bs, sent_len, hid dim * num directions]
+        #output over padding tokens are zero tensors
+        #hidden = [bs, num layers * num directions, hid dim]
+        #cell = [bs, num layers * num directions, hid dim]
+        #concat the final forward (hidden[:,-2,:]) and backward (hidden[:,-1,:]) hidden layers
+        #and apply dropout
+        pi_hidden = self.pi_dr(torch.cat((pi_hidden_rnn[-2, :, :], pi_hidden_rnn[-1, :, :]), dim = 1))
+        pi_hidden_fc = self.pi_fc(pi_hidden)
+        pi_hidden_ac = self.pi_ac(pi_hidden_fc)
+        pi_encoded = pi_hidden_ac
 
-        self._create_network(cls_model)
-        with tf.name_scope('cost'):
-            self._create_loss_optimizer()
-            self._create_cls_loss_optimizer()
-
-        init = tf.compat.v1.global_variables_initializer()
-
-        self.sess = tf.compat.v1.InteractiveSession()  
-        self.saver = tf.compat.v1.train.Saver()
+        # hidden => mean, logvar: pi
+        pi_mean = self.pi_mean_fc(pi_encoded)
+        pi_mean_bn = self.pi_mean_bn(pi_mean)
+        pi_logvar = self.pi_logvar_fc(pi_encoded)
+        pi_logvar_bn = self.pi_logvar_bn(pi_logvar)
+        # posterior: pi
+        pi_posterior_mean = pi_mean_bn # N x S
+        pi_posterior_logvar = pi_logvar_bn # N x S
         
-        # check exist checkpoint
-        ckpt = None
-        if save_file is not None:
-            ckpt = tf.train.get_checkpoint_state(save_file)
+        return theta_encoded, pi_encoded, \
+                theta_posterior_mean, theta_posterior_logvar, \
+                pi_posterior_mean, pi_posterior_logvar
+    
+    def decode(self, input_, theta_posterior_mean, theta_posterior_var, pi_posterior_mean, pi_posterior_var):
+        bs, *_ = input_.size()
+        # take sample: theta
+        theta_eps = input_.data.new().resize_as_(theta_posterior_mean.data).normal_() # noise 
+        theta_eps_reshaped = theta_eps.view(bs * self.num_sentiment, self.num_topic)
+        theta_posterior_mean_reshaped = theta_posterior_mean.view(bs * self.num_sentiment, self.num_topic)
+        theta_posterior_var_reshaped = theta_posterior_var.view(bs * self.num_sentiment, self.num_topic)
+        # reparameterization
+        theta_posterior = theta_posterior_mean_reshaped + theta_posterior_var_reshaped.sqrt() * theta_eps_reshaped                   
+        theta_posterior_reshaped = theta_posterior.view(bs, self.num_sentiment, self.num_topic)
+        theta_posterior_ac = self.theta_de_ac(theta_posterior_reshaped)
         
-        if ckpt:
-            print ("Load checkpoint")
-            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+        # take sample: pi
+        pi_lambda = 0.001
+        pi_eps = input_.data.new().resize_as_(pi_posterior_mean.data).normal_() # noise 
+        # reparameterization
+        pi_posterior = pi_posterior_mean + pi_posterior_var.sqrt() * pi_eps 
+        pi_posterior_ac = self.pi_de_ac(pi_posterior)
+        pi_decoded = pi_lambda * self.pi_de_fc(pi_posterior_ac) # N x V
+        pi_posterior_reshaped = pi_posterior_ac.view(bs, self.num_sentiment, 1) # N x S x 1
+        pi_posterior_repeated = pi_posterior_reshaped.repeat((1, 1, self.num_topic)) # N x S x K
+        
+        # Nx(S*K) * (NxS).repeat(K) * (S*K)xD
+        # NxSxK * NxSxK
+        theta_pi_mix = theta_posterior_ac * pi_posterior_repeated
+        theta_pi_mix_reshaped = theta_pi_mix.view(bs, self.num_mix)
+        
+        # do reconstruction
+        theta_pi_decoded = self.theta_pi_de_fc(theta_pi_mix_reshaped)
+        theta_pi_decoded_bn = self.theta_pi_de_bn(theta_pi_decoded)
+        theta_pi_decoded_ac = self.theta_pi_de_ac(theta_pi_decoded_bn)
+        recon = theta_pi_decoded_ac          # reconstructed distribution over vocabulary
+        
+        return recon
+    
+    def forward(self, input_, input_r_, input_len_, compute_loss=False, avg_loss=True):
+        # compute posterior
+        theta_encoded, pi_encoded, \
+        theta_posterior_mean, theta_posterior_logvar, \
+        pi_posterior_mean, pi_posterior_logvar = self.encode(input_, input_r_, input_len_) 
+        theta_posterior_var    = theta_posterior_logvar.exp()
+        pi_posterior_var = pi_posterior_logvar.exp()
+        
+        recon = self.decode(input_, theta_posterior_mean, theta_posterior_var, \
+                                    pi_posterior_mean, pi_posterior_var )
+        if compute_loss:
+            return recon, self.loss(input_, recon, \
+                                    theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
+                                    pi_posterior_mean, pi_posterior_logvar, pi_posterior_var, \
+                                    avg_loss)
         else:
-            print ("No checkpoint")
-            self.sess.run(init)
-
-    def _create_network(self, cls_model):
-        self.network_weights = self._initialize_weights(**self.network_architecture)
-        self.z_mean,self.z_log_sigma_sq,self.pi_mean,self.pi_log_sigma_sq = \
-            self._recognition_network(self.network_weights["weights_recog"],
-                                      self.network_weights["biases_recog"],
-                                     cls_model)
-
-        with tf.name_scope('z_sample'):
-            eps = tf.random.normal((self.batch_size * self.pol_dim, self.h_dim), 0, 1,
-                                   dtype=tf.float32)
-
-            N, S, K = self.batch_size , self.pol_dim, self.h_dim
-            z_mean = tf.reshape(self.z_mean, [N * S, K])
-            z_sigma = tf.reshape(self.z_log_sigma_sq, [N * S, K])
-            self.z = tf.add(z_mean,
-                            tf.multiply(tf.sqrt(tf.exp(z_sigma)), eps))
-            self.sigma = tf.exp(self.z_log_sigma_sq)
-
-        with tf.name_scope('pi_sample'):
-            pi_eps = tf.random.normal((self.batch_size, self.pol_dim), 0, 1,
-                                   dtype=tf.float32)
-            self.pi = tf.add(self.pi_mean,
-                            tf.multiply(tf.sqrt(tf.exp(self.pi_log_sigma_sq)), pi_eps))
-            self.pi_sigma = tf.exp(self.pi_log_sigma_sq)
-
-        self.x_reconstr_mean = \
-            self._generator_network(self.z,self.pi,self.network_weights["weights_gener"])
-
-        print(self.x_reconstr_mean)
-
-    def _initialize_weights(self, n_hidden_recog_1, n_hidden_recog_2,
-                            n_hidden_gener_1,
-                            n_input, n_input_pi, n_z, n_p):
-        all_weights = dict()
-        all_weights['weights_recog'] = {
-            'h1': tf.compat.v1.get_variable('h1',[n_input, n_hidden_recog_1],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'h2': tf.compat.v1.get_variable('h2',[n_hidden_recog_1, n_hidden_recog_2],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'pi_h1': tf.compat.v1.get_variable('pi_h1',[n_input_pi, n_hidden_recog_1],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'pi_h2': tf.compat.v1.get_variable('pi_h2',[n_hidden_recog_1, n_hidden_recog_2],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'out_mean': tf.compat.v1.get_variable('out_mean',[n_hidden_recog_2, self.mix_dim],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'out_log_sigma': tf.compat.v1.get_variable('out_log_sigma',[n_hidden_recog_2, self.mix_dim],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'pi_out_mean': tf.compat.v1.get_variable('pi_out_mean',[n_hidden_recog_2, self.pol_dim],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            'pi_out_log_sigma': tf.compat.v1.get_variable('pi_out_log_sigma',[n_hidden_recog_2, self.pol_dim],
-               initializer=tf.contrib.layers.xavier_initializer()),
-            }
-        all_weights['biases_recog'] = {
-            'b1': tf.Variable(tf.zeros([n_hidden_recog_1], dtype=tf.float32), name='b1'),
-            'b2': tf.Variable(tf.zeros([n_hidden_recog_2], dtype=tf.float32), name='b2'),
-            'pi_b1': tf.Variable(tf.zeros([n_hidden_recog_1], dtype=tf.float32), name='pi_b1'),
-            'pi_b2': tf.Variable(tf.zeros([n_hidden_recog_2], dtype=tf.float32), name='pi_b2'),
-            'out_mean': tf.Variable(tf.zeros([self.mix_dim], dtype=tf.float32), name='out_mean'),
-            'out_log_sigma': tf.Variable(tf.zeros([self.mix_dim], dtype=tf.float32), name='out_log_sigma'),
-            'pi_out_mean': tf.Variable(tf.zeros([self.pol_dim], dtype=tf.float32), name='pi_out_mean'),
-            'pi_out_log_sigma': tf.Variable(tf.zeros([self.pol_dim], dtype=tf.float32), name='pi_out_log_sigma')}
-        all_weights['weights_gener'] = {
-            'h1': tf.Variable(xavier_init(self.pol_dim*self.h_dim, n_hidden_gener_1), name='gener_h1'),
-            'h2': tf.Variable(xavier_init(self.pol_dim*self.h_dim,n_hidden_gener_1), name='gener_h2'),
-            'h3': tf.Variable(xavier_init(self.pol_dim, n_hidden_gener_1), name='gener_h3')}
-
-        return all_weights
-
-    def _recognition_network(self, weights, biases, cls_model=None):
-        max_features = self.network_architecture["n_input"]
-        maxlen = self.network_architecture["n_input_pi"]
-        embedding_dims = 100
-        filters = 250
-        kernel_size = 3
-        hidden_dims = self.network_architecture['n_hidden_recog_1']#500
-        
-        # Generate probabilistic encoder (recognition network)
-        with tf.name_scope('z_layers'):
-            layer_1 = self.transfer_fct(tf.add(tf.matmul(self.x, weights['h1']),
-                                               biases['b1']))
-            layer_2 = self.transfer_fct(tf.add(tf.matmul(layer_1, weights['h2']),
-                                               biases['b2']))
-            layer_do = tf.nn.dropout(layer_2, rate=1 - self.keep_prob)
-
-        N, S, K = self.batch_size , self.pol_dim, self.h_dim
-        with tf.name_scope('z_mean'):
-            layer_dout_mean = tf.add(tf.matmul(layer_do, weights['out_mean']),
-                            biases['out_mean'])
-            layer_dout_mean = tf.reshape(layer_dout_mean, [N, S, K])
-            z_mean = tf.contrib.layers.batch_norm(layer_dout_mean)
-
-        with tf.name_scope('z_sigma'):
-            layer_dout_sigma = tf.add(tf.matmul(layer_do, weights['out_log_sigma']),
-                       biases['out_log_sigma'])
-            layer_dout_sigma = tf.reshape(layer_dout_sigma, [N, S, K])
-            z_log_sigma_sq = tf.contrib.layers.batch_norm(layer_dout_sigma)
-
-        with tf.name_scope('pi_layers'):
-            if cls_model is None:
-                pi_layer = Embedding(max_features, embedding_dims, input_length=maxlen)(self.x_pi)
-                pi_layer = Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1)(pi_layer)
-                pi_layer = GlobalMaxPooling1D()(pi_layer)
-                pi_layer = Dense(hidden_dims)(pi_layer)
-                pi_layer = Activation('relu')(pi_layer)
-            else:
-                pi_layer = cls_model(self.x_pi)
-            
-            pi_layer_do = tf.nn.dropout(pi_layer, rate=1 - self.keep_prob)#Dropout(0.4)(pi_layer)
-            
-        with tf.name_scope('pi_mean'):
-            pi_mean = tf.contrib.layers.batch_norm(tf.add(tf.matmul(pi_layer_do, weights['pi_out_mean']),
-                            biases['pi_out_mean']))
-            #pi_mean = Dense(self.pol_dim)(pi_layer_do)
-            #pi_mean = BatchNormalization()(pi_mean)
-        
-        with tf.name_scope('pi_sigma'):
-            pi_log_sigma_sq = \
-                tf.contrib.layers.batch_norm(tf.add(tf.matmul(pi_layer_do, weights['pi_out_log_sigma']),
-                       biases['pi_out_log_sigma']))        
-            #pi_log_sigma_sq = Dense(self.pol_dim)(pi_layer_do)
-            #pi_log_sigma_sq = BatchNormalization()(pi_log_sigma_sq)
-        
-        return (z_mean, z_log_sigma_sq, pi_mean, pi_log_sigma_sq)
-
-    def _generator_network(self,z, pi, weights):
-        N, S, K = self.batch_size , self.pol_dim, self.h_dim
-        # z is (NxS)xK
-        z_distr = tf.reshape(z, [N, S, K])
-        self.layer_do_z = tf.nn.softmax(tf.contrib.layers.batch_norm(z_distr))
-        self.layer_do_s = tf.nn.softmax(tf.contrib.layers.batch_norm(pi))
-        self.lay_s = 0.001*tf.matmul(self.layer_do_s, weights['h3'])
-        #self.lay_s = 0.0*tf.matmul(self.layer_do_s, weights['h3'])
-        
-        s = tf.reshape(self.layer_do_s, [N, S, 1])
-        s = tf.tile(s, [1, 1, K])
-        with tf.name_scope('Decoder'):
-            # Nx(S*K) * (NxS).repeat(K) * (S*K)xD
-            sz = tf.reshape(self.layer_do_z*s, [N, S*K])
-            fc = tf.add(tf.matmul(sz, weights['h2']), self.lay_s)
-        with tf.name_scope('x_reconstr'):
-            x_reconstr_mean = tf.nn.softmax(tf.contrib.layers.batch_norm(fc))
-
-        return x_reconstr_mean
-
-    def _create_loss_optimizer(self):
-
-        self.x_reconstr_mean+=1e-10
-
-        reconstr_loss = \
-            -tf.reduce_sum(self.x * tf.math.log(self.x_reconstr_mean),1)#/tf.reduce_sum(self.x,1)
-
-        latent_z_loss = 0.5*( tf.reduce_sum(tf.math.divide(self.sigma,self.var2),-1)+\
-        tf.reduce_sum( tf.multiply(tf.math.divide((self.mu2 - self.z_mean),self.var2),
-                  (self.mu2 - self.z_mean)),-1) - self.h_dim +\
-                           tf.reduce_sum(tf.math.log(self.var2),-1)  - tf.reduce_sum(self.z_log_sigma_sq  ,-1) )
-
-        latent_s_loss = 0.5*( tf.reduce_sum(tf.math.divide(self.pi_sigma,self.pi_var2),1)+\
-        tf.reduce_sum( tf.multiply(tf.math.divide((self.pi_mu2 - self.pi_mean),self.pi_var2),
-                  (self.pi_mu2 - self.pi_mean)),1) - self.pol_dim +\
-                           tf.reduce_sum(tf.math.log(self.pi_var2),1)  - tf.reduce_sum(self.pi_log_sigma_sq  ,1) )
-        
-
-        self.kl_s_loss = tf.reduce_mean(latent_s_loss)
-        self.kl_z_loss = tf.reduce_sum(tf.reduce_mean(latent_z_loss,0),-1) 
-        self.kl_loss =  self.kl_s_loss + self.kl_z_loss
-        self.cost = tf.reduce_mean(reconstr_loss) + self.kl_loss# average over batch
-
-        self.optimizer = \
-            tf.compat.v1.train.AdamOptimizer(learning_rate=self.learning_rate,beta1=0.99).minimize(self.cost)
-
-    def _create_cls_loss_optimizer(self):
-        self.logits = tf.nn.softmax(self.pi_mean)
-        self.cls_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
-            logits=self.logits, labels=self.y))
-        #self.cls_loss = tf.reduce_mean(categorical_crossentropy(self.y, self.logits))
-        self.cls_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.cls_learning_rate).minimize(self.cls_loss)
-
-    def cls_fit(self, X, Y):
-        #K.set_learning_phase(1)
-        opt, cost = self.sess.run((self.cls_optimizer, self.cls_loss),feed_dict={self.x_pi: X, self.y: Y, self.keep_prob: .4})        
-        return cost    
-
-    def partial_fit(self, X, X_pi):
-        opt, cost, kl_s_loss, kl_z_loss, emb = self.sess.run((self.optimizer, self.cost, self.kl_s_loss, self.kl_z_loss ,self.network_weights['weights_gener']['h2']),feed_dict={self.x: X, self.x_pi: X_pi,self.keep_prob: .4})
-        
-        return cost,kl_s_loss,kl_z_loss,emb
-
-    def get_weights(self):
-        gen_w = self.network_weights['weights_gener']
-        h2, h3 = self.sess.run((gen_w['h2'], gen_w['h3']))
-        return [h2, h3]
+            return recon, theta_encoded, pi_encoded, \
+                    theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
+                     pi_posterior_mean, pi_posterior_logvar, pi_posterior_var
     
-    def test(self, X):
-        """Test the model and return the lowerbound on the log-likelihood.
-        """
-        cost = self.sess.run((self.cost),feed_dict={self.x: np.expand_dims(X, axis=0),self.keep_prob: 1.0})
-        return cost
-    
-    def topic_prop(self, X):
-        """theta_ is the topic proportion vector. Apply softmax transformation to it before use.
-        """
-        N, S, K = self.batch_size , self.pol_dim, self.h_dim
-        z_mean = tf.reshape(self.z_mean, [N * S, K])
-        theta_ = self.sess.run(tf.nn.softmax(z_mean),feed_dict={self.x: X,self.keep_prob: 1.0})
-        return theta_
-
-    def senti_prop(self, X):
-        K.set_learning_phase(0)
-        """pi_ is the sentiment proportion vector. Apply softmax transformation to it before use.
-        """
-        pi_ = self.sess.run(self.logits,feed_dict={self.x_pi: X,self.keep_prob: 1.0})
-        return pi_
-    
-    def save_model(self, save_file, epoch_numb):
-        # save model
-        self.saver.save(self.sess, save_file, global_step=epoch_numb)
+    def loss(self, input_, recon, \
+             theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
+             pi_posterior_mean, pi_posterior_logvar, pi_posterior_var, \
+             avg=True):
+        # NL
+        NL  = -(input_ * (recon + 1e-10).log()).sum(1)
+        # KLD, see Section 3.3 of Akash Srivastava and Charles Sutton, 2017, 
+        # https://arxiv.org/pdf/1703.01488.pdf
+        # sentiments: pi
+        pi_prior_mean   = self.pi_prior_mean.expand_as(pi_posterior_mean)
+        pi_prior_var    = self.pi_prior_var.expand_as(pi_posterior_mean)
+        pi_prior_logvar = self.pi_prior_logvar.expand_as(pi_posterior_mean)
+        pi_var_division    = pi_posterior_var  / pi_prior_var
+        pi_diff            = pi_posterior_mean - pi_prior_mean
+        pi_diff_term       = pi_diff * pi_diff / pi_prior_var
+        pi_logvar_division = pi_prior_logvar - pi_posterior_logvar
+        # put KLD together
+        pi_KLD = 0.5 * ( (pi_var_division + pi_diff_term + pi_logvar_division).sum(1) - self.num_sentiment)
+        
+        # topics: theta
+        theta_prior_mean   = self.theta_prior_mean.expand_as(theta_posterior_mean) # N x S x K
+        theta_prior_var    = self.theta_prior_var.expand_as(theta_posterior_mean)
+        theta_prior_logvar = self.theta_prior_logvar.expand_as(theta_posterior_mean)
+        theta_var_division    = theta_posterior_var  / theta_prior_var
+        theta_diff            = theta_posterior_mean - theta_prior_mean
+        theta_diff_term       = theta_diff * theta_diff / theta_prior_var
+        theta_logvar_division = theta_prior_logvar - theta_posterior_logvar
+        # put KLD together
+        theta_KLD = 0.5 * ( (theta_var_division + theta_diff_term + theta_logvar_division).sum(-1) - self.num_topic)
+        
+        # loss
+        loss = (NL.mean() + pi_KLD.mean() + theta_KLD.mean(0).sum(-1))
+        
+        # in traiming mode, return averaged loss. In testing mode, return individual loss
+        if avg:
+            return loss
+        else:
+            return loss
