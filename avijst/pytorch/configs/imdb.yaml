@@ -1,0 +1,30 @@
+dataset:
+  name: 'imdb'
+  folder_path: 'data/imdb/10k'
+  data_file: 'train.txt.npy'
+  vocab_file: 'vocab.pkl'
+  labels: ['negative', 'positive']
+  maxlen: 1000
+
+model:
+  name: 'avijst'
+  n_encoder_1: 500
+  n_encoder_2: 500
+  n_latent: 50
+  n_sentiment: 2
+  dropout: 0.6
+  lambda: 20.0
+  alpha: 1.0
+
+training:
+  lr: 0.001  # 0.002
+  cls_lr: 0.005
+  bs: 50
+  d_step: 1
+  epochs: 300 # 20
+  n_topwords: 50
+  n_labeled: 500
+  ratio: 0.2
+  exp: 1
+  result: 'results/imdb'
+  write: True

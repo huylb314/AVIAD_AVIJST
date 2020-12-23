@@ -64,10 +64,3 @@ class URSADataset(Dataset):
         if self.y_tfms:
             batch_y = self.y_tfms(batch_y)
         return (batch_x, batch_y)
-
-# class DataLoader():
-#     def __init__(self, ds, bs, drop_last=True): self.ds, self.bs, self.drop_last = ds, bs, drop_last
-#     def __iter__(self):
-#         length = len(self.ds) // self.bs if self.drop_last else math.ceil(len(self.ds) / self.bs)
-#         for i in range(0, length, 1):
-#             yield self.ds[(i*self.bs):(i*self.bs)+self.bs]

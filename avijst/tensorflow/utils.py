@@ -31,17 +31,18 @@ def calc_perp(model, dl, gamma_prior_batch):
         cost.append(c/n_d)
     print ('The approximated perplexity is: ',(np.exp(np.mean(np.array(cost)))))
 
-def print_top_words(epoch, beta, id_vocab, n_top_words, result, write):
-    print ('---------------Printing the Topics------------------')
+def print_top_words(epoch, weights, id_vocab, n_top_words, result, write, printout=True):
+    if printout: print ('---------------Printing the Topics------------------')
     string_out = ""
-    for i in range(len(beta)):
-        string_out += " ".join([id_vocab[j] for j in beta[i].argsort()[:-n_top_words - 1:-1]])
-        string_out += "\n"
-        if write:
-            with open(os.path.join(result, "{}.txt".format(epoch)), 'w+') as fw:
-                fw.write(string_out)
-    print (string_out)
-    print ('---------------End of Topics------------------')
+    for weight in weights:
+        for i in range(len(weight)):
+            string_out += " ".join([id_vocab[j] for j in weight[i].argsort()[:-n_top_words - 1:-1]])
+            string_out += "\n"
+            if write:
+                with open(os.path.join(result, "{}.txt".format(epoch)), 'w+') as fw:
+                    fw.write(string_out)
+    if printout: print (string_out)
+    if printout: print ('---------------End of Topics------------------')
 
 def classification_evaluate(y_pred, y_true, labels, show=True):
     accuracy = metrics.accuracy_score(y_true, y_pred)
@@ -68,11 +69,12 @@ def classification_evaluate_dl(fn, dl, n_latent, labels, show=True):
     avg_f1_score = [0.] * n_latent
     for x_,  y_ in dl:
         # Compute accuracy
-        temp_ = fn(x_)
-        temp_ = np.argmax(temp_, axis=1)
+        temp_x = fn(x_)
+        temp_x = np.argmax(temp_x, axis=-1)
+        temp_y = np.argmax(y_, axis=-1)
 
         accuracy, precision, recall, support, f1_score = \
-            classification_evaluate(temp_, y_, labels, show=False)
+            classification_evaluate(temp_x, temp_y, labels, show=False)
         avg_accuracy += accuracy / len(dl.ds) * dl.bs
         for i in range(n_latent):
             avg_precision[i] += precision[i] / len(dl.ds) * dl.bs
