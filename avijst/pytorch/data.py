@@ -1,11 +1,9 @@
 import numpy as np
 from sklearn import metrics
 import math
-from keras.preprocessing import sequence
-from keras.preprocessing.text import Tokenizer
 from typing import *
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 from typing import *
 
@@ -88,7 +86,7 @@ class YToOnehot():
     def __init__(self, num_classes):
         self.num_classes = num_classes
     def __call__(self, item):
-        categorical = [0] * num_classes
+        categorical = [0] * self.num_classes
         categorical[item] = 1
         return categorical
 
@@ -127,3 +125,16 @@ class IMDBDataset(Dataset):
     def __getitem__(self, i): 
         return compose(self.xr[i], self.xr_tfms), compose(self.lenxr[i], self.lenxr_tfms), \
                 compose(self.x[i], self.x_tfms), compose(self.y[i], self.y_tfms)
+
+class Sampler():
+    def __init__(self, ds, bs, shuffle=False):
+        self.n,self.bs,self.shuffle = len(ds),bs,shuffle
+    def __iter__(self):
+        self.idxs = torch.randperm(self.n) if self.shuffle else torch.arange(self.n)
+        for i in range(0, self.n, self.bs): yield self.idxs[i:i+self.bs]
+
+class DataLoader():
+    def __init__(self, ds, sampler, collate_fn=collate):
+        self.ds, self.sampler, self.collate_fn = ds, sampler, collate_fn
+    def __iter__(self):
+        for s in self.sampler: yield self.collate_fn([self.ds[i] for i in s])

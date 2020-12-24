@@ -1,7 +1,7 @@
 dataset:
   name: 'imdb'
   folder-path: 'data/imdb/'
-  dest-path: 'data/imdb/5k/'
+  dest-path: 'data/imdb/10k/'
   train-file: 'train.txt.npy'
   vocab-file: 'vocab.pkl'
 
@@ -10,11 +10,10 @@ label:
   positive: 1
 
 limit:
-  num-words: 5000
+  num-words: 10000
   skip-top: 0
-  maxlen: 10000
+  maxlen: 1000
   seed: 0
   start-char: 1
   oov-char: 2
   index-from: 3
-  vocab-size: 5000

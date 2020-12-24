@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn import metrics
+import torch.nn.functional as F
 import os
 
 def onehot(data, min_length):
@@ -61,26 +62,28 @@ def classification_evaluate(y_pred, y_true, labels, show=True):
 
     return (accuracy, precision, recall, support, f1_score)
 
-def classification_evaluate_dl(fn, dl, n_latent, labels, show=True):
+def classification_evaluate_dl(model, dl, n_latent, labels, show=True):
     avg_accuracy = 0.
     avg_precision = [0.] * n_latent
     avg_recall = [0.] * n_latent
     dl_support = [0] * n_latent
     avg_f1_score = [0.] * n_latent
-    for x_,  y_ in dl:
+    for xr_, xrlen_, x_, y_ in dl:
         # Compute accuracy
-        temp_x = fn(x_)
-        temp_x = np.argmax(temp_x, axis=-1)
-        temp_y = np.argmax(y_, axis=-1)
+        recon, posterior_mean_theta, posterior_logvar_theta, posterior_mean_pi, posterior_logvar_pi = \
+                        model(xr_, xrlen_, x_, y_, compute_loss=False)
+        posterior_mean_pi = F.softmax(posterior_mean_pi, dim=-1)
+        temp_x = posterior_mean_pi.argmax(-1).int().data.cpu().tolist()
+        temp_y = y_.flatten().int().data.cpu().tolist()
 
         accuracy, precision, recall, support, f1_score = \
             classification_evaluate(temp_x, temp_y, labels, show=False)
-        avg_accuracy += accuracy / len(dl.ds) * dl.bs
+        avg_accuracy += accuracy / len(dl.ds) * dl.sampler.bs
         for i in range(n_latent):
-            avg_precision[i] += precision[i] / len(dl.ds) * dl.bs
-            avg_recall[i] += recall[i] / len(dl.ds) * dl.bs
+            avg_precision[i] += precision[i] / len(dl.ds) * dl.sampler.bs
+            avg_recall[i] += recall[i] / len(dl.ds) * dl.sampler.bs
             dl_support[i] += support[i]
-            avg_f1_score[i] += f1_score[i] / len(dl.ds) * dl.bs
+            avg_f1_score[i] += f1_score[i] / len(dl.ds) * dl.sampler.bs
     if show:
         print ("dl.ds: ", len(dl.ds), "supports: ", np.sum(dl_support))
         print ("avg_accuracy", "=", "{:.9f}".format(avg_accuracy))

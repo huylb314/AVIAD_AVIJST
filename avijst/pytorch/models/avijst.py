@@ -3,238 +3,211 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class AVIJST(nn.Module):
-    def __init__(self, num_input, en1_units, en2_units, \
-                 num_topic, num_sentiment, drop_rate, \
-                 init_mult, num_layers, bidirectional, pad_idx):
-        super(ProdLDA, self).__init__()
+    def __init__(self, num_input, en1_units, en2_units, num_topic, num_senti, dr_topic, dr_senti, init_mult):
+        super(AVIJST, self).__init__()
         self.num_input, self.en1_units, self.en2_units, \
-        self.num_topic, self.num_sentiment, self.drop_rate, \
-        self.init_mult, self.num_layers, self.bidirectional, self.pad_idx = \
-                num_input, en1_units, en2_units, \
-                num_topic, num_sentiment, drop_rate, \
-                init_mult, num_layers, bidirectional, pad_idx
-        self.num_mix = self.num_topic * self.num_sentiment
-        self.batch_first, self.enforce_sorted = True, False
-                
-        ## PI
-        # encoder: pi
-        # self.pi_en1_fc = nn.Linear(self.num_input, self.en1_units)
-        # self.pi_en1_ac = nn.Softplus()
-        # self.pi_en2_fc     = nn.Linear(self.en1_units, self.en2_units)
-        # self.pi_en2_ac = nn.Softplus()
-        # self.pi_en2_dr   = nn.Dropout(self.drop_rate)
-        # sentiment classification: pi 
-        self.pi_emb = nn.Embedding(self.num_input, self.en1_units, padding_idx=self.pad_idx)
-        self.pi_rnn = nn.LSTM(self.en1_units, self.en2_units, num_layers=self.num_layers, \
-                              bidirectional=self.bidirectional, batch_first=self.batch_first)
-        self.pi_fc = nn.Linear(self.en2_units * 2, self.en2_units)
-        self.pi_dr = nn.Dropout(self.drop_rate)
-        self.pi_ac = nn.ReLU()
-        # mean, logvar: pi
-        self.pi_mean_fc = nn.Linear(self.en2_units, self.num_sentiment)
-        self.pi_mean_bn = nn.BatchNorm1d(self.num_sentiment)
-        self.pi_logvar_fc = nn.Linear(self.en2_units, self.num_sentiment)
-        self.pi_logvar_bn = nn.BatchNorm1d(self.num_sentiment)
-        # decoder: pi
-        self.pi_de_ac = nn.Softmax(dim=-1)
-        self.pi_de_fc = nn.Linear(self.num_sentiment, self.num_input)
-        # prior mean and variance: pi (1 x S) S_sentiments
-        self.pi_prior_mean   = torch.Tensor(1, self.num_sentiment).fill_(0)
-        self.pi_prior_var    = torch.Tensor(1, self.num_sentiment).fill_(0.995)
-        self.pi_prior_mean   = nn.Parameter(self.pi_prior_mean, requires_grad=False)
-        self.pi_prior_var    = nn.Parameter(self.pi_prior_var, requires_grad=False)
-        self.pi_prior_logvar = nn.Parameter(self.pi_prior_var.log(), requires_grad=False)
-        
-        ## THETA
+            self.num_topic, self.num_senti, \
+                self.dr_topic, self.dr_senti, \
+                    self.init_mult = num_input, en1_units, en2_units, \
+                                        num_topic, num_senti, \
+                                            dr_topic, dr_senti, \
+                                                init_mult
+
         # encoder: theta
-        self.theta_en1_fc = nn.Linear(self.num_input, self.en1_units)
-        self.theta_en1_ac = nn.Softplus()
-        self.theta_en2_fc     = nn.Linear(self.en1_units, self.en2_units)
-        self.theta_en2_ac = nn.Softplus()
-        self.theta_en2_dr   = nn.Dropout(self.drop_rate)
-        # mean, logvar: theta
-        self.theta_mean_fc = nn.Linear(self.en2_units, self.num_mix)
-        self.theta_mean_bn = nn.BatchNorm1d(self.num_mix)
-        self.theta_logvar_fc = nn.Linear(self.en2_units, self.num_mix)
-        self.theta_logvar_bn = nn.BatchNorm1d(self.num_mix)
-        # decoder: theta
-        self.theta_de_ac = nn.Softmax(dim=-1)
-        # prior mean and variance: theta (S x K) (S_sentiments) distribution over (K_topics)
-        self.theta_prior_mean = torch.Tensor(self.num_sentiment, self.num_topic).fill_(0)
-        self.theta_prior_var    = torch.Tensor(self.num_sentiment, self.num_topic).fill_(0.995)
-        self.theta_prior_mean   = nn.Parameter(self.theta_prior_mean, requires_grad=False)
-        self.theta_prior_var    = nn.Parameter(self.theta_prior_var, requires_grad=False)
-        self.theta_prior_logvar = nn.Parameter(self.theta_prior_var.log(), requires_grad=False)
+        self.en1_fc_theta     = nn.Linear(self.num_input, self.en1_units) # N x V => N x 500
+        self.en2_fc_theta     = nn.Linear(self.en1_units, self.en2_units)
+        self.en2_drop_theta   = nn.Dropout(self.dr_topic)
+        # hidden
+        self.mean_fc_theta    = nn.Linear(self.en2_units, self.num_topic * self.num_senti)
+        self.mean_bn_theta    = nn.BatchNorm1d(self.num_senti * self.num_topic)           
+        self.logvar_fc_theta  = nn.Linear(self.en2_units, self.num_topic * self.num_senti)
+        self.logvar_bn_theta  = nn.BatchNorm1d(self.num_senti * self.num_topic)
+        # decoder
+        self.p_drop_theta     = nn.Dropout(self.dr_topic)
+        self.de_fc_theta    = nn.Linear(self.num_topic * self.num_senti, self.num_input, bias=False)
+        self.de_bn1_theta = nn.BatchNorm1d(self.num_senti * self.num_topic)
+        self.de_bn2_theta = nn.BatchNorm1d(self.num_input)
         
-        # mix theta pi
-        self.theta_pi_de_fc = nn.Linear(self.num_mix, self.num_input)
-        self.theta_pi_de_bn = nn.BatchNorm1d(self.num_input)
-        self.theta_pi_de_ac = nn.Softmax(dim=-1)
+        # encoder: pi MLP
+        self.en1_fc_pi     = nn.Linear(self.num_input, self.en1_units) # N x V => N x 500
+        self.en2_fc_pi     = nn.Linear(self.en1_units, self.en2_units)
+        self.en2_drop_pi   = nn.Dropout(self.dr_senti)
+        # hidden
+        self.mean_fc_pi    = nn.Linear(self.en2_units, self.num_senti)
+        self.mean_bn_pi    = nn.BatchNorm1d(self.num_senti)           
+        self.logvar_fc_pi  = nn.Linear(self.en2_units, self.num_senti)
+        self.logvar_bn_pi  = nn.BatchNorm1d(self.num_senti)   
+        # decoder
+        self.de_bn_pi = nn.BatchNorm1d(self.num_senti)
+        self.de_fc_pi = nn.Linear(self.num_senti, self.num_input, bias=False)
+        
+        # prior mean and variance as constant buffers
+        prior_mean_theta   = torch.Tensor(1, self.num_senti, self.num_topic).fill_(0)
+        prior_var_theta    = torch.Tensor(1, self.num_senti, self.num_topic).fill_(0.995)
+        self.prior_mean_theta   = nn.Parameter(prior_mean_theta, requires_grad=False)
+        self.prior_var_theta    = nn.Parameter(prior_var_theta, requires_grad=False)
+        self.prior_logvar_theta = nn.Parameter(prior_var_theta.log(), requires_grad=False)
+        
+        prior_mean_pi   = torch.Tensor(1, self.num_senti).fill_(0)
+        prior_var_pi    = torch.Tensor(1, self.num_senti).fill_(0.995)
+        self.prior_mean_pi   = nn.Parameter(prior_mean_pi, requires_grad=False)
+        self.prior_var_pi    = nn.Parameter(prior_var_pi, requires_grad=False)
+        self.prior_logvar_pi = nn.Parameter(prior_var_pi.log(), requires_grad=False)
         
         # initialize decoder weight
         if init_mult != 0:
             #std = 1. / math.sqrt( init_mult * (num_topic + num_input))
-            self.pi_de_fc.weight.data.uniform_(0, init_mult)
-            self.theta_pi_de_fc.weight.data.uniform_(0, init_mult)
+            self.de_fc_pi.weight.data.uniform_(0, self.init_mult, )
+            self.de_fc_theta.weight.data.uniform_(0, self.init_mult)
         # remove BN's scale parameters
-        for component in [self.pi_mean_bn, self.pi_logvar_bn, \
-                          self.theta_mean_bn, self.theta_logvar_bn, self.theta_pi_de_bn]:
+        for component in [self.mean_bn_theta, self.logvar_bn_theta, \
+                          self.mean_bn_pi, self.logvar_bn_pi]:
             component.weight.requires_grad = False
             component.weight.fill_(1.0)
-            
-    def encode(self, input_, input_r_, input_len_):
-        # extract bs
-        bs, *_ = input_.size()
-        
-        ## THETA
+        for component in [self.de_bn1_theta, self.de_bn2_theta, self.de_bn_pi]:
+            component.weight.requires_grad = False
+            component.weight.fill_(1.0)
+               
+    def encode(self, bs, input_, input_r_, input_len_):
         # encoder: theta
-        theta_encoded1 = self.theta_en1_fc(input_)
-        theta_encoded1_ac = self.theta_en1_ac(theta_encoded1)
-        theta_encoded2 = self.theta_en2_fc(theta_encoded1_ac)
-        theta_encoded2_ac = self.theta_en2_ac(theta_encoded2)
-        theta_encoded2_dr = self.theta_en2_dr(theta_encoded2_ac)
-        theta_encoded = theta_encoded2_dr
-        # hidden => mean, logvar: theta
-        theta_mean = self.theta_mean_fc(theta_encoded)
-        theta_mean_bn = self.theta_mean_bn(theta_mean)
-        theta_mean_reshaped = theta_mean_bn.view(bs, self.num_sentiment, self.num_topic)
-        theta_logvar = self.theta_logvar_fc(theta_encoded)
-        theta_logvar_bn = self.theta_logvar_bn(theta_logvar)
-        theta_logvar_reshaped = theta_logvar_bn.view(bs, self.num_sentiment, self.num_topic)
-        # posterior: theta
-        theta_posterior_mean = theta_mean_reshaped # N x S x K
-        theta_posterior_logvar = theta_logvar_reshaped # N x S x K
+        en1_theta = F.softplus(self.en1_fc_theta(input_))
+        en2_theta = F.softplus(self.en2_fc_theta(en1_theta)) 
+        encoded_theta = self.en2_drop_theta(en2_theta) # N x (S * K)
+        # hidden
+        posterior_mean_theta_fc = self.mean_fc_theta  (encoded_theta)
+        posterior_mean_theta_reshaped   = posterior_mean_theta_fc.view(bs, self.num_senti * self.num_topic)  # N x S x K
+        posterior_mean_theta   = self.mean_bn_theta  (posterior_mean_theta_reshaped)       # N x S x K
+        posterior_mean_theta   = posterior_mean_theta.view(bs, self.num_senti, self.num_topic)  # N x S x K
+        posterior_logvar_theta_fc = self.logvar_fc_theta(encoded_theta)
+        posterior_logvar_theta_reshaped = posterior_logvar_theta_fc.view(bs, self.num_senti * self.num_topic)# N x S x K
+        posterior_logvar_theta = self.logvar_bn_theta(posterior_logvar_theta_reshaped)     # N x S x K
+        posterior_logvar_theta = posterior_logvar_theta.view(bs, self.num_senti, self.num_topic)# N x S x K
         
-        ## PI
-        # encoder: pi
-        # pi_encoded1 = self.pi_en1_fc(input_)
-        # pi_encoded1_ac = self.pi_en1_ac(pi_encoded1)
-        # pi_encoded2 = self.pi_en2_fc(pi_encoded1_ac)
-        # pi_encoded2_ac = self.pi_en2_ac(pi_encoded2_ac)
-        # pi_encoded2_dr = self.pi_en2_dr(pi_encoded2_dr)
-        # pi_encoded = pi_encoded2_dr
-        # encoder: pi_cls 
-        pi_embedded = self.pi_dr(self.pi_emb(input_r_))
-        # pack sequence
-        pi_packed_embedded = nn.utils.rnn.pack_padded_sequence(pi_embedded, input_len_, batch_first=self.batch_first, enforce_sorted=self.enforce_sorted)
-        #embedded = [bs, sent_len, emb_dim]
-        pi_packed_output, (pi_hidden_rnn, pi_cell_rnn) = self.pi_rnn(pi_packed_embedded)
-        #unpack sequence
-        pi_output, pi_output_len_ = nn.utils.rnn.pad_packed_sequence(pi_packed_output, batch_first=self.batch_first)
-        #output = [bs, sent_len, hid dim * num directions]
-        #output over padding tokens are zero tensors
-        #hidden = [bs, num layers * num directions, hid dim]
-        #cell = [bs, num layers * num directions, hid dim]
-        #concat the final forward (hidden[:,-2,:]) and backward (hidden[:,-1,:]) hidden layers
-        #and apply dropout
-        pi_hidden = self.pi_dr(torch.cat((pi_hidden_rnn[-2, :, :], pi_hidden_rnn[-1, :, :]), dim = 1))
-        pi_hidden_fc = self.pi_fc(pi_hidden)
-        pi_hidden_ac = self.pi_ac(pi_hidden_fc)
-        pi_encoded = pi_hidden_ac
-
-        # hidden => mean, logvar: pi
-        pi_mean = self.pi_mean_fc(pi_encoded)
-        pi_mean_bn = self.pi_mean_bn(pi_mean)
-        pi_logvar = self.pi_logvar_fc(pi_encoded)
-        pi_logvar_bn = self.pi_logvar_bn(pi_logvar)
-        # posterior: pi
-        pi_posterior_mean = pi_mean_bn # N x S
-        pi_posterior_logvar = pi_logvar_bn # N x S
+        # encoder: pi 
+        en1_pi = F.softplus(self.en1_fc_pi(input_)) # N x S
+        en2_pi = F.softplus(self.en2_fc_pi(en1_pi)) # N x S
+        encoded_pi = self.en2_drop_pi(en2_pi)       # N x S
+        # hidden
+        posterior_mean_pi   = self.mean_bn_pi  (self.mean_fc_pi  (encoded_pi)) # N x S
+        posterior_logvar_pi = self.logvar_bn_pi(self.logvar_fc_pi(encoded_pi)) # N x S
         
-        return theta_encoded, pi_encoded, \
-                theta_posterior_mean, theta_posterior_logvar, \
-                pi_posterior_mean, pi_posterior_logvar
+        return posterior_mean_theta, posterior_logvar_theta, posterior_logvar_theta.exp(), \
+                posterior_mean_pi, posterior_logvar_pi, posterior_logvar_pi.exp()
     
-    def decode(self, input_, theta_posterior_mean, theta_posterior_var, pi_posterior_mean, pi_posterior_var):
-        bs, *_ = input_.size()
+    def take_sample(self, input_, posterior_mean_theta, posterior_var_theta, posterior_mean_pi, posterior_var_pi):
         # take sample: theta
-        theta_eps = input_.data.new().resize_as_(theta_posterior_mean.data).normal_() # noise 
-        theta_eps_reshaped = theta_eps.view(bs * self.num_sentiment, self.num_topic)
-        theta_posterior_mean_reshaped = theta_posterior_mean.view(bs * self.num_sentiment, self.num_topic)
-        theta_posterior_var_reshaped = theta_posterior_var.view(bs * self.num_sentiment, self.num_topic)
-        # reparameterization
-        theta_posterior = theta_posterior_mean_reshaped + theta_posterior_var_reshaped.sqrt() * theta_eps_reshaped                   
-        theta_posterior_reshaped = theta_posterior.view(bs, self.num_sentiment, self.num_topic)
-        theta_posterior_ac = self.theta_de_ac(theta_posterior_reshaped)
+        eps_theta = input_.data.new().resize_as_(posterior_mean_theta.data).normal_() # noise N x S x K
+        posterior_theta = posterior_mean_theta + posterior_var_theta.sqrt() * eps_theta #  N x S x K
         
         # take sample: pi
-        pi_lambda = 0.001
-        pi_eps = input_.data.new().resize_as_(pi_posterior_mean.data).normal_() # noise 
-        # reparameterization
-        pi_posterior = pi_posterior_mean + pi_posterior_var.sqrt() * pi_eps 
-        pi_posterior_ac = self.pi_de_ac(pi_posterior)
-        pi_decoded = pi_lambda * self.pi_de_fc(pi_posterior_ac) # N x V
-        pi_posterior_reshaped = pi_posterior_ac.view(bs, self.num_sentiment, 1) # N x S x 1
-        pi_posterior_repeated = pi_posterior_reshaped.repeat((1, 1, self.num_topic)) # N x S x K
+        eps_pi = input_.data.new().resize_as_(posterior_mean_pi.data).normal_() # noise N x S
+        posterior_pi = posterior_mean_pi + posterior_var_pi.sqrt() * eps_pi # N x S
         
-        # Nx(S*K) * (NxS).repeat(K) * (S*K)xD
-        # NxSxK * NxSxK
-        theta_pi_mix = theta_posterior_ac * pi_posterior_repeated
-        theta_pi_mix_reshaped = theta_pi_mix.view(bs, self.num_mix)
+        return posterior_theta, posterior_pi
+    
+    def decode(self, bs, posterior_theta, posterior_pi):        
+        # posterior_theta:  N x S x K
+        # posterior_pi: N x S
+        # z_distr = tf.reshape(z, [N, S, K])
+        # self.layer_do_z = tf.nn.softmax(tf.contrib.layers.batch_norm(z_distr))
+        posterior_theta_reshaped = posterior_theta.view(bs, self.num_senti * self.num_topic)
+        layer_do_posterior_theta_bn = self.de_bn1_theta(posterior_theta_reshaped)
+        layer_do_posterior_theta_bn_reshaped = \
+                layer_do_posterior_theta_bn.view(bs, self.num_senti, self.num_topic)
+        layer_do_posterior_theta_ac = F.softmax(layer_do_posterior_theta_bn_reshaped, dim=-1)
+        layer_do_posterior_theta = layer_do_posterior_theta_ac # N x S x K
+        
+        layer_do_posterior_pi_bn = self.de_bn_pi(posterior_pi)
+        layer_do_posterior_pi_ac = F.softmax(layer_do_posterior_pi_bn, dim=-1)
+        layer_do_posterior_pi = layer_do_posterior_pi_ac # N x S
+        
+        layer_pi = 0.01 * self.de_fc_pi(layer_do_posterior_pi) # N x V
+        
+        layer_do_posterior_pi_reshaped = layer_do_posterior_pi.view(bs, self.num_senti, 1) # N x S x 1
+        layer_do_posterior_pi_repeated = layer_do_posterior_pi_reshaped.repeat((1, 1, self.num_topic)) # N x S x K
+        
+        theta_pi = layer_do_posterior_theta * layer_do_posterior_pi_repeated
+        theta_pi_reshaped = theta_pi.view(bs, self.num_senti * self.num_topic) # N x (S * K)
+        theta_pi_layer_pi = self.de_fc_theta(theta_pi_reshaped) + layer_pi # N x V
+        
+        theta_pi_bn = self.de_bn2_theta(theta_pi_layer_pi)
+        theta_pi_ac = F.softmax(theta_pi_bn, dim=-1)
         
         # do reconstruction
-        theta_pi_decoded = self.theta_pi_de_fc(theta_pi_mix_reshaped)
-        theta_pi_decoded_bn = self.theta_pi_de_bn(theta_pi_decoded)
-        theta_pi_decoded_ac = self.theta_pi_de_ac(theta_pi_decoded_bn)
-        recon = theta_pi_decoded_ac          # reconstructed distribution over vocabulary
-        
+        recon = theta_pi_ac
         return recon
     
-    def forward(self, input_, input_r_, input_len_, compute_loss=False, avg_loss=True):
+    def forward(self, input_r_, input_len_, input_,  label_, cls_loss=False, compute_loss=False, avg_loss=True):
+        bs, *_ = input_.size()
         # compute posterior
-        theta_encoded, pi_encoded, \
-        theta_posterior_mean, theta_posterior_logvar, \
-        pi_posterior_mean, pi_posterior_logvar = self.encode(input_, input_r_, input_len_) 
-        theta_posterior_var    = theta_posterior_logvar.exp()
-        pi_posterior_var = pi_posterior_logvar.exp()
+        posterior_mean_theta, posterior_logvar_theta, posterior_var_theta,\
+            posterior_mean_pi, posterior_logvar_pi, posterior_var_pi = self.encode(bs, input_, input_r_, input_len_) 
         
-        recon = self.decode(input_, theta_posterior_mean, theta_posterior_var, \
-                                    pi_posterior_mean, pi_posterior_var )
+        # take sample
+        posterior_theta, posterior_pi = self.take_sample(input_, \
+                                                         posterior_mean_theta, posterior_var_theta, \
+                                                         posterior_mean_pi, posterior_var_pi)
+        
+        recon = self.decode(bs, posterior_theta, posterior_pi)
         if compute_loss:
-            return recon, self.loss(input_, recon, \
-                                    theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
-                                    pi_posterior_mean, pi_posterior_logvar, pi_posterior_var, \
-                                    avg_loss)
+            if cls_loss:
+                return recon, self.loss_cls(posterior_mean_pi, posterior_logvar_pi, posterior_var_pi, label_, avg_loss)
+            else:
+                return recon, self.loss(bs, input_, recon, \
+                                        posterior_mean_theta, posterior_logvar_theta, posterior_var_theta, \
+                                        posterior_mean_pi, posterior_logvar_pi, posterior_var_pi, avg_loss)
         else:
-            return recon, theta_encoded, pi_encoded, \
-                    theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
-                     pi_posterior_mean, pi_posterior_logvar, pi_posterior_var
-    
-    def loss(self, input_, recon, \
-             theta_posterior_mean, theta_posterior_logvar, theta_posterior_var, \
-             pi_posterior_mean, pi_posterior_logvar, pi_posterior_var, \
+            return recon, posterior_mean_theta, posterior_logvar_theta, posterior_mean_pi, posterior_logvar_pi
+
+    def loss_cls(self, posterior_mean_pi, posterior_logvar_pi, posterior_var_pi, label, avg=True):
+        posterior_mean_pi_sm = F.softmax(posterior_mean_pi, dim=-1)
+        loss_l = F.cross_entropy(posterior_mean_pi_sm, label)
+        if avg:
+            return loss_l.mean()
+        else:
+            return loss_l
+        
+        
+    def loss(self, bs, input_, recon, \
+             posterior_mean_theta, posterior_logvar_theta, posterior_var_theta, \
+             posterior_mean_pi, posterior_logvar_pi, posterior_var_pi, \
              avg=True):
         # NL
         NL  = -(input_ * (recon + 1e-10).log()).sum(1)
+        
+        posterior_mean_theta = posterior_mean_theta.view(bs, self.num_senti, self.num_topic)
+        posterior_logvar_theta = posterior_logvar_theta.view(bs, self.num_senti, self.num_topic)
+        posterior_var_theta = posterior_var_theta.view(bs, self.num_senti, self.num_topic)
         # KLD, see Section 3.3 of Akash Srivastava and Charles Sutton, 2017, 
         # https://arxiv.org/pdf/1703.01488.pdf
-        # sentiments: pi
-        pi_prior_mean   = self.pi_prior_mean.expand_as(pi_posterior_mean)
-        pi_prior_var    = self.pi_prior_var.expand_as(pi_posterior_mean)
-        pi_prior_logvar = self.pi_prior_logvar.expand_as(pi_posterior_mean)
-        pi_var_division    = pi_posterior_var  / pi_prior_var
-        pi_diff            = pi_posterior_mean - pi_prior_mean
-        pi_diff_term       = pi_diff * pi_diff / pi_prior_var
-        pi_logvar_division = pi_prior_logvar - pi_posterior_logvar
+        prior_mean_theta   = self.prior_mean_theta.expand_as(posterior_mean_theta) # N x S x K
+        prior_var_theta    = self.prior_var_theta.expand_as(posterior_mean_theta) 
+        prior_logvar_theta = self.prior_logvar_theta.expand_as(posterior_mean_theta)
+        var_division_theta    = posterior_var_theta  / prior_var_theta
+        diff_theta            = posterior_mean_theta - prior_mean_theta
+        diff_term_theta       = diff_theta * diff_theta / prior_var_theta
+        logvar_division_theta = prior_logvar_theta - posterior_logvar_theta
         # put KLD together
-        pi_KLD = 0.5 * ( (pi_var_division + pi_diff_term + pi_logvar_division).sum(1) - self.num_sentiment)
+        KLD_theta = 0.5 * ( (var_division_theta + diff_term_theta + logvar_division_theta).sum(-1) - self.num_topic)
         
-        # topics: theta
-        theta_prior_mean   = self.theta_prior_mean.expand_as(theta_posterior_mean) # N x S x K
-        theta_prior_var    = self.theta_prior_var.expand_as(theta_posterior_mean)
-        theta_prior_logvar = self.theta_prior_logvar.expand_as(theta_posterior_mean)
-        theta_var_division    = theta_posterior_var  / theta_prior_var
-        theta_diff            = theta_posterior_mean - theta_prior_mean
-        theta_diff_term       = theta_diff * theta_diff / theta_prior_var
-        theta_logvar_division = theta_prior_logvar - theta_posterior_logvar
+        prior_mean_pi   = self.prior_mean_pi.expand_as(posterior_mean_pi) # N x S
+        prior_var_pi    = self.prior_var_pi.expand_as(posterior_mean_pi)
+        prior_logvar_pi = self.prior_logvar_pi.expand_as(posterior_mean_pi)
+        var_division_pi    = posterior_var_pi  / prior_var_pi
+        diff_pi            = posterior_mean_pi - prior_mean_pi
+        diff_term_pi       = diff_pi * diff_pi / prior_var_pi
+        logvar_division_pi = prior_logvar_pi - posterior_logvar_pi
         # put KLD together
-        theta_KLD = 0.5 * ( (theta_var_division + theta_diff_term + theta_logvar_division).sum(-1) - self.num_topic)
+        KLD_pi = 0.5 * ( (var_division_pi + diff_term_pi + logvar_division_pi).sum(1) - self.num_senti)
         
-        # loss
-        loss = (NL.mean() + pi_KLD.mean() + theta_KLD.mean(0).sum(-1))
-        
+        #self.kl_loss =  tf.reduce_mean(latent_s_loss) + tf.reduce_sum(tf.reduce_mean(latent_z_loss,0),-1) 
+        #self.cost = tf.reduce_mean(reconstr_loss) + self.kl_loss# average over batch
+
         # in traiming mode, return averaged loss. In testing mode, return individual loss
         if avg:
+            kl_loss = KLD_theta.sum(-1) + KLD_pi
+            # loss
+            loss = (NL.mean() + kl_loss.mean())
             return loss
         else:
             return loss

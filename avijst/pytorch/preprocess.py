@@ -53,13 +53,13 @@ def main():
     limit_start_char = config_limit['start-char']
     limit_oov_char = config_limit['oov-char']
     limit_index_from = config_limit['index-from']
-    limit_vocab_size = config_limit['vocab-size']
+    limit_maxlen = config_limit['maxlen']
 
     # create result folders
     os.makedirs(dataset_dest_path, exist_ok=True)
 
     (x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=limit_num_words, skip_top=limit_skip_top, \
-                                                          seed=limit_seed, start_char=limit_start_char, \
+                                                          maxlen=limit_maxlen, seed=limit_seed, start_char=limit_start_char, \
                                                           oov_char=limit_oov_char, index_from=limit_index_from)
     print (x_train.shape, y_train.shape)
     print (x_test.shape, y_test.shape)
@@ -67,7 +67,7 @@ def main():
     id_vocab, vocab = create_vocab(idx_from=3)
     vocab = vocab.items()
     vocab = sorted(vocab, key=lambda item: item[1])
-    vocab = dict(vocab[:limit_vocab_size])
+    vocab = dict(vocab[:limit_num_words])
     print (vocab)
 
     # Save Into File
