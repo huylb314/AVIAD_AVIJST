@@ -13,10 +13,9 @@ Applied Artificial Intelligence, 2019; 33(9), 796-816
 1. [Requirements and Dependencies](#requirements-and-dependencies)
 1. [Installation](#installation)
 1. [Experiments](#experiments)
-1. [Topic Coherent Evaluate](#topic-coherent-evaluate)
 
 ### Introduction
-Autoencoding Variational Inference for Aspect Discovery (AVIAD) model, which extends the previous work of Autoencoding Variational In- ference for Topic Models (AVITM) to embed prior knowledge of seed words. This work includes enhancement of the previous AVI architecture and also modification of the loss function. Ultimately,
+Autoencoding Variational Inference for Aspect-based Joint Sentiment/Topic (AVIJST). Instead of training the JST model using Gibbs sampling, we want to take the advantage ofVariational Autoencoder method which is fast and scalable on large dataset to this joint sentiment/topic model.
 
 ### Requirements and Dependencies
 - Ubuntu (We test with Ubuntu = 19.10)
@@ -29,47 +28,26 @@ Download repository:
 
 Change directory to tensorflow aviad version
 
-    $ cd aviad/tensorflow
+    $ cd avijst/tensorflow
 
-Create anaconda environment `tf_aviad`
+Create anaconda environment `tf_avi`
     
     $ conda env create -f environment.yml
 
 ### Experiments
-Run the `prodLDA` model in the `URSA` dataset, configs are defined in yaml file 
+Run the `AVIJST` model in the `IMDB` dataset, configs are defined in yaml file 
 
-    $ cd aviad/tensorflow/
-    $ source acitvate tf_aviad
-    $ python run.py --config configs/1k.yaml
+    $ cd avijst/tensorflow/
+    $ source activate tf_avi
+    $ python run.py --config configs/imdb.yaml
 
-The results will be saved in `results/ursa` with the folder name for each epoch.
-
-### Topic Coherent Evaluate
-Compute topic coherent for `URSA` results, we use package implemented by [Jey Han Lau, David Newman and Timothy Baldwin (2014)](https://github.com/jhlau/topic_interpretability.git)
-
-    $ cd aviad/tensorflow/topic_coherent
-    $ bash clean.sh
-    $ bash evaluate_aviad.sh -f ../results/ursa/1k/ -c ../corpus/ursa/ -n 3 -t 50
-
-```
-evaluate_aviad.sh
--f : topwords folder
--c : corpus folder
--n : number of topics
--t : number of coherent topwords
-```
-
-```
-Results:
-    oc folder: result file.
-    final_log.txt: summary scores.
-```
+The results will be saved in `results/imdb` with the folder name for each epoch.
 
 ### Preprocessing
-To preprocess the `URSA` dataset, configs are defined in yaml file 
+To preprocess the `IMDB` dataset, configs are defined in yaml file 
 
-    $ cd aviad/tensorflow/
-    $ source acitvate tf_aviad
+    $ cd avijst/tensorflow/
+    $ source activate tf_avi
     $ python -c "import nltk; nltk.download('punkt')"
     $ python -c "import nltk; nltk.download('stopwords')"
     $ python preprocess.py --config configs/preprocessing.yaml

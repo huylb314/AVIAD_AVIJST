@@ -16,7 +16,7 @@ Applied Artificial Intelligence, 2019; 33(9), 796-816
 1. [Topic Coherent Evaluate](#topic-coherent-evaluate)
 
 ### Introduction
-Autoencoding Variational Inference for Aspect Discovery (AVIAD) model, which extends the previous work of Autoencoding Variational In- ference for Topic Models (AVITM) to embed prior knowledge of seed words. This work includes enhancement of the previous AVI architecture and also modification of the loss function. Ultimately,
+Autoencoding Variational Inference for Aspect Discovery (AVIAD) model, which extends the previous work of Autoencoding Variational In- ference for Topic Models (AVITM) to embed prior knowledge of seed words. This work includes enhancement of the previous AVI architecture and also modification of the loss function.
 
 ### Requirements and Dependencies
 - Ubuntu (We test with Ubuntu = 19.10)
@@ -31,15 +31,15 @@ Change directory to tensorflow aviad version
 
     $ cd aviad/pytorch
 
-Create anaconda environment `pt_aviad`
+Create anaconda environment `pt_avi`
     
     $ conda env create -f environment.yml
 
 ### Experiments
-Run the `prodLDA` model in the `URSA` dataset, configs are defined in yaml file 
+Run the `AVIAD` model in the `URSA` dataset, configs are defined in yaml file 
 
     $ cd aviad/pytorch/
-    $ source acitvate pt_aviad
+    $ source activate pt_avi
     $ python run.py --config configs/1k.yaml
 
 The results will be saved in `results/ursa` with the folder name for each epoch.
@@ -69,7 +69,7 @@ Results:
 To preprocess the `URSA` dataset, configs are defined in yaml file 
 
     $ cd aviad/pytorch/
-    $ source activate pt_aviad
+    $ source activate pt_avi
     $ python -c "import nltk; nltk.download('punkt')"
     $ python -c "import nltk; nltk.download('stopwords')"
     $ python preprocess.py --config configs/preprocessing.yaml

@@ -332,5 +332,5 @@ dependencies:
   - pip:
     - keras==2.2.5
     - numpy==1.16.1
-prefix: /home/huylb314/anaconda3/envs/tf_aviad
+prefix: /home/huylb314/anaconda3/envs/tf_avi
 

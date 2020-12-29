@@ -1,4 +1,4 @@
-name: tf_aviad
+name: tf_avi
 channels:
   - defaults
 dependencies:
@@ -331,5 +331,5 @@ dependencies:
   - zstd=1.4.5=h0b5b093_0
   - pip:
     - numpy==1.16.1
-prefix: /home/huylb314/anaconda3/envs/tf_aviad
+prefix: /home/huylb314/anaconda3/envs/tf_avi
 
